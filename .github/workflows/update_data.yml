@@ -1,0 +1,44 @@
+name: Actualizar datos de natación
+
+on:
+  schedule:
+    - cron: "0 22 * * *"   # Cada día a las 22:00 UTC (medianoche España)
+  workflow_dispatch:        # También se puede lanzar manualmente desde GitHub
+
+jobs:
+  fetch-and-upload:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Instalar uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Instalar dependencias Python
+        run: uv sync
+
+      - name: Descargar datos de Garmin Connect
+        env:
+          GARMIN_EMAIL:    ${{ secrets.GARMIN_EMAIL }}
+          GARMIN_PASSWORD: ${{ secrets.GARMIN_PASSWORD }}
+        run: uv run python src/fetch_swimming.py
+
+      - name: Subir CSVs al repo privado de datos
+        env:
+          DATA_GITHUB_PAT: ${{ secrets.DATA_GITHUB_PAT }}
+        run: |
+          git clone https://x-access-token:${DATA_GITHUB_PAT}@github.com/joscani/garmin-data.git /tmp/garmin-data
+          cp data/swimming_activities.csv /tmp/garmin-data/
+          cp data/swimming_laps.csv /tmp/garmin-data/
+          cd /tmp/garmin-data
+          git config user.email "github-actions@github.com"
+          git config user.name "GitHub Actions"
+          git add swimming_activities.csv swimming_laps.csv
+          git diff --cached --quiet || git commit -m "Actualizar datos $(date '+%Y-%m-%d')"
+          git push

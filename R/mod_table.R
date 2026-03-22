@@ -4,12 +4,7 @@ library(DT)
 
 mod_table_ui <- function(id) {
   ns <- NS(id)
-  tagList(
-    div(class = "d-flex justify-content-end mb-3",
-      downloadButton(ns("download_csv"), "Exportar CSV", class = "btn-outline-primary btn-sm")
-    ),
-    DTOutput(ns("table"), width = "100%")
-  )
+  DTOutput(ns("table"), width = "100%")
 }
 
 mod_table_server <- function(id, activities) {
@@ -50,9 +45,5 @@ mod_table_server <- function(id, activities) {
       )
     })
 
-    output$download_csv <- downloadHandler(
-      filename = function() paste0("natacion_", Sys.Date(), ".csv"),
-      content = function(file) readr::write_csv(table_data(), file)
-    )
   })
 }

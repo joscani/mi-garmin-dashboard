@@ -1,4 +1,7 @@
 .env
+.Renviron
+token_privado
+*.json
 __pycache__/
 *.pyc
 .garminconnect/

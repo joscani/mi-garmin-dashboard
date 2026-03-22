@@ -4,11 +4,29 @@ library(dplyr)
 library(lubridate)
 library(readr)
 
+GITHUB_DATA_REPO <- "joscani/garmin-data"
+GITHUB_DATA_BRANCH <- "main"
+
+# Descarga un CSV del repo privado de datos y devuelve su path temporal
+.github_download_csv <- function(filename) {
+  token <- Sys.getenv("DATA_GITHUB_PAT", "")
+  if (nchar(token) == 0) stop("Falta DATA_GITHUB_PAT para acceder a los datos")
+  url <- sprintf("https://%s@raw.githubusercontent.com/%s/%s/%s",
+                 token, GITHUB_DATA_REPO, GITHUB_DATA_BRANCH, filename)
+  tmp <- tempfile(fileext = ".csv")
+  download.file(url, destfile = tmp, quiet = TRUE)
+  tmp
+}
+
 # Cachear datos para evitar releer CSV en cada reactive
 .data_cache <- new.env(parent = emptyenv())
 
 load_activities <- function(path = "data/swimming_activities.csv", bust_cache = FALSE) {
   if (!bust_cache && exists("activities", envir = .data_cache)) return(.data_cache$activities)
+  if (!file.exists(path)) {
+    message("CSV local no encontrado, descargando de GitHub...")
+    path <- .github_download_csv("swimming_activities.csv")
+  }
   d <- read_csv(path, show_col_types = FALSE) |>
     mutate(
       date             = as.Date(startTimeLocal),
@@ -32,6 +50,10 @@ load_activities <- function(path = "data/swimming_activities.csv", bust_cache = 
 
 load_laps <- function(path = "data/swimming_laps.csv", bust_cache = FALSE) {
   if (!bust_cache && exists("laps", envir = .data_cache)) return(.data_cache$laps)
+  if (!file.exists(path)) {
+    message("CSV local no encontrado, descargando de GitHub...")
+    path <- .github_download_csv("swimming_laps.csv")
+  }
   d <- read_csv(path, show_col_types = FALSE) |>
     mutate(
       swimStroke = tolower(coalesce(swimStroke, "unknown")),

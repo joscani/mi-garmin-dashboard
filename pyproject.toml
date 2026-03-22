@@ -1,0 +1,9 @@
+[project]
+name = "mi-garmin-dashboard"
+version = "0.1.0"
+description = "Fetch de datos de natación desde Garmin Connect"
+requires-python = ">=3.10"
+dependencies = [
+    "garminconnect>=0.2.19",
+    "python-dotenv>=1.0.0",
+]

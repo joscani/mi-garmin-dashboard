@@ -1,0 +1,16 @@
+.env
+__pycache__/
+*.pyc
+.garminconnect/
+data/*.csv
+data/*.fit
+.venv/
+*.egg-info/
+dist/
+build/
+.Rhistory
+.RData
+.Rproj.user/
+renv/library/
+renv/staging/
+renv/cellar/

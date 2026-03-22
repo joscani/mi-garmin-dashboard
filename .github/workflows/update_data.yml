@@ -23,22 +23,37 @@ jobs:
       - name: Instalar dependencias Python
         run: uv sync
 
+      - name: Recuperar tokens de Garmin del repo privado
+        env:
+          DATA_GITHUB_PAT: ${{ secrets.DATA_GITHUB_PAT }}
+        run: |
+          git clone https://x-access-token:${DATA_GITHUB_PAT}@github.com/joscani/garmin-data.git /tmp/garmin-data
+          mkdir -p .garminconnect
+          cp /tmp/garmin-data/.garminconnect/* .garminconnect/
+
       - name: Descargar datos de Garmin Connect
         env:
           GARMIN_EMAIL:    ${{ secrets.GARMIN_EMAIL }}
           GARMIN_PASSWORD: ${{ secrets.GARMIN_PASSWORD }}
         run: uv run python src/fetch_swimming.py
 
-      - name: Subir CSVs al repo privado de datos
+      - name: Guardar tokens actualizados en repo privado
         env:
           DATA_GITHUB_PAT: ${{ secrets.DATA_GITHUB_PAT }}
         run: |
-          git clone https://x-access-token:${DATA_GITHUB_PAT}@github.com/joscani/garmin-data.git /tmp/garmin-data
-          cp data/swimming_activities.csv /tmp/garmin-data/
-          cp data/swimming_laps.csv /tmp/garmin-data/
+          cp .garminconnect/* /tmp/garmin-data/.garminconnect/
           cd /tmp/garmin-data
           git config user.email "github-actions@github.com"
           git config user.name "GitHub Actions"
+          git add .garminconnect/
+          git diff --cached --quiet || git commit -m "Actualizar tokens Garmin $(date '+%Y-%m-%d')"
+          git push
+
+      - name: Subir CSVs al repo privado de datos
+        run: |
+          cp data/swimming_activities.csv /tmp/garmin-data/
+          cp data/swimming_laps.csv /tmp/garmin-data/
+          cd /tmp/garmin-data
           git add swimming_activities.csv swimming_laps.csv
           git diff --cached --quiet || git commit -m "Actualizar datos $(date '+%Y-%m-%d')"
           git push

@@ -13,6 +13,21 @@ Dashboard interactivo en R/Shiny para visualizar tus actividades de natación de
 - Gráficos de evolución temporal interactivos (clicables para ver detalle de sesión)
 - Análisis largo a largo de cada sesión (brazadas, SWOLF, estilo)
 - Filtros por rango de fechas y tipo de brazada
+- Actualización automática de datos via GitHub Actions (dos veces al día)
+
+## Arquitectura
+
+```
+Garmin Connect
+      ↓  GitHub Actions (12:00 y 23:00 hora española)
+Python fetch_swimming.py
+      ↓
+Repo privado GitHub (datos + tokens Garmin)
+      ↓  DATA_GITHUB_PAT
+Shiny app en shinyapps.io
+```
+
+Los datos CSV y los tokens de Garmin se guardan en un **repositorio privado separado** — no están en este repo.
 
 ## Estructura del proyecto
 
@@ -27,8 +42,11 @@ Dashboard interactivo en R/Shiny para visualizar tus actividades de natación de
 │   └── utils_charts.R           # Tema ggplot2 y paleta de colores
 ├── src/
 │   ├── fetch_swimming.py        # Script de descarga de datos desde Garmin Connect
-│   └── garmin_auth.py           # Autenticación con Garmin Connect (tokens)
-├── data/                        # CSVs generados por el script Python (no en repo)
+│   └── garmin_auth.py           # Autenticación con Garmin Connect (tokens OAuth)
+├── .github/
+│   └── workflows/
+│       └── update_data.yml      # GitHub Action: descarga y actualiza datos
+├── data/                        # CSVs generados localmente (no en repo)
 │   ├── swimming_activities.csv
 │   └── swimming_laps.csv
 ├── .env.example                 # Plantilla de variables de entorno
@@ -36,7 +54,7 @@ Dashboard interactivo en R/Shiny para visualizar tus actividades de natación de
 └── pyproject.toml               # Dependencias Python (reproducible con uv)
 ```
 
-## Cómo usarlo
+## Cómo usarlo (fork)
 
 ### 1. Requisitos
 
@@ -82,7 +100,41 @@ renv::restore()
 shiny::runApp()
 ```
 
-## Desplegar en shinyapps.io
+## Configurar actualización automática (GitHub Actions)
+
+El workflow `.github/workflows/update_data.yml` descarga los datos de Garmin y los sube a un repo privado dos veces al día.
+
+### Repo privado de datos
+
+Crea un repositorio privado en GitHub (ej: `garmin-data`) y sube los CSVs y los tokens:
+
+```bash
+mkdir garmin-data && cd garmin-data
+git init
+cp ../data/*.csv .
+cp -r ../.garminconnect .
+git add . && git commit -m "Initial data"
+git remote add origin https://github.com/TU_USUARIO/garmin-data.git
+git push -u origin main
+```
+
+### Secrets necesarios en el repo público
+
+En **Settings → Secrets and variables → Actions** añade:
+
+| Secret | Valor |
+|--------|-------|
+| `GARMIN_EMAIL` | Tu email de Garmin Connect |
+| `GARMIN_PASSWORD` | Tu contraseña de Garmin Connect |
+| `DATA_GITHUB_PAT` | Personal Access Token con permiso `repo` |
+
+### Desplegar en shinyapps.io
+
+El token `DATA_GITHUB_PAT` también debe estar disponible para la app. Como las cuentas gratuitas de shinyapps.io no soportan variables de entorno, se incluye un `.Renviron` en el despliegue:
+
+```bash
+echo "DATA_GITHUB_PAT=tu_token" > .Renviron
+```
 
 ```r
 library(rsconnect)
@@ -98,20 +150,22 @@ rsconnect::deployApp(
     "app.R",
     "R/mod_charts.R", "R/mod_filters.R", "R/mod_kpis.R",
     "R/mod_table.R", "R/utils_charts.R", "R/utils_data.R",
-    "data/swimming_activities.csv", "data/swimming_laps.csv"
+    ".Renviron"
   ),
   appName = "mi-garmin-dashboard",
   account = "tu_usuario"
 )
 ```
 
-> Los CSVs se incluyen en el despliegue pero no están en el repo. Tienes que generarlos localmente primero con el script Python.
+> El `.Renviron` está en `.gitignore` — nunca se sube al repo.
 
 ## Tecnologías
 
 | Capa | Herramienta |
 |------|-------------|
 | Descarga de datos | Python + [garminconnect](https://github.com/cyberjunky/python-garminconnect) |
+| Automatización | GitHub Actions |
+| Almacenamiento datos | Repositorio privado de GitHub |
 | App web | R + [Shiny](https://shiny.posit.co/) |
 | UI | [bslib](https://rstudio.github.io/bslib/) (Bootstrap 5) |
 | Gráficos | [ggplot2](https://ggplot2.tidyverse.org/) + [ggiraph](https://davidgohel.github.io/ggiraph/) |

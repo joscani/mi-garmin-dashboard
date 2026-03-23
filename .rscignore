@@ -1,8 +1,8 @@
 .env
-.garminconnect/
+.garminconnect
 token_privado
-.github/
+.github
 pyproject.toml
 uv.lock
-src/
-data/
+src
+data

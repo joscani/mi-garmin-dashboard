@@ -6,6 +6,7 @@ from pathlib import Path
 from garminconnect import (
     Garmin,
     GarminConnectAuthenticationError,
+    GarminConnectTooManyRequestsError,
 )
 
 TOKEN_DIR = Path(__file__).parent.parent / ".garminconnect"
@@ -26,8 +27,8 @@ def get_client() -> Garmin:
             client = Garmin()
             client.login(str(TOKEN_DIR))
             return client
-        except GarminConnectAuthenticationError:
-            pass  # Tokens expirados, hacer login nuevo
+        except (GarminConnectAuthenticationError, GarminConnectTooManyRequestsError):
+            pass  # Tokens expirados o rate limit en el exchange, hacer login nuevo
 
     # Login fresco
     if not email or not password:

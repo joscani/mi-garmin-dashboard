@@ -102,7 +102,7 @@ server <- function(input, output, session) {
   })
 
   mod_kpis_server("kpis", activities_filtered)
-  mod_charts_server("charts", summary_data, activities_filtered, laps_filtered, filters$stroke_filter)
+  mod_charts_server("charts", summary_data, activities_filtered, laps_filtered, filters$stroke_filter, filters$aggregation)
   mod_table_server("table", activities_filtered)
 }
 

@@ -103,6 +103,10 @@ mod_charts_ui <- function(id) {
           card_header("SWOLF medio por periodo"),
           girafeOutput(ns("swolf_trend"), height = "480px", width = "100%")
         )
+      ),
+      card(full_screen = TRUE, class = "mt-3",
+        card_header("Evolución de calidad de sesiones por periodo (% crol)"),
+        girafeOutput(ns("quality_period"), height = "380px", width = "100%")
       )
     )
   )
@@ -110,7 +114,7 @@ mod_charts_ui <- function(id) {
 
 # ── Server ──────────────────────────────────────────────────────────────────
 
-mod_charts_server <- function(id, summary_data, activities, laps, stroke_filter) {
+mod_charts_server <- function(id, summary_data, activities, laps, stroke_filter, aggregation) {
   moduleServer(id, function(input, output, session) {
 
     active_laps <- reactive({
@@ -223,9 +227,16 @@ mod_charts_server <- function(id, summary_data, activities, laps, stroke_filter)
 
     # ═══ POR LARGO ═══
 
+    # Calidad por sesión (solo crol)
+    session_quality <- reactive({
+      compute_session_quality(laps())
+    })
+
     # Sesiones ordenadas por fecha desc
     sessions_ordered <- reactive({
-      activities() |> arrange(desc(date))
+      activities() |>
+        left_join(session_quality(), by = "activityId") |>
+        arrange(desc(date))
     })
 
     # Índice de la sesión actual (1 = más reciente)
@@ -256,6 +267,14 @@ mod_charts_server <- function(id, summary_data, activities, laps, stroke_filter)
       h <- floor(act$duration_min / 60)
       m <- round(act$duration_min %% 60)
       dur_str <- if (h > 0) sprintf("%dh %02dmin", h, m) else sprintf("%d min", m)
+
+      calidad_color <- switch(coalesce(act$calidad, ""),
+        "Muy buena" = "#06d6a0", "Buena" = "#0077b6",
+        "Regular"   = "#ffd166", "Mala"  = "#e63946", "#94a3b8"
+      )
+
+      has_quality <- !is.na(act$calidad) && !is.null(act$n_crol) && act$n_crol > 0
+
       tags$div(
         style = "text-align:center;",
         tags$div(style = "font-weight:700; font-size:1rem; color:#0077b6;",
@@ -265,7 +284,20 @@ mod_charts_server <- function(id, summary_data, activities, laps, stroke_filter)
                  if (!is.na(act$averageSwolf)) paste0(" · SWOLF ", act$averageSwolf) else "",
                  if (!is.na(act$pace_100m))    paste0(" · ", format_pace(act$pace_100m), " /100m") else "")
         ),
-        tags$div(style = "font-size:0.75rem; color:#94a3b8;",
+        if (has_quality) tags$div(
+          style = "margin-top:4px; display:flex; justify-content:center; align-items:center; gap:10px; flex-wrap:wrap;",
+          tags$span(
+            style = paste0("background:", calidad_color, "22; color:", calidad_color,
+                           "; font-weight:700; font-size:0.82rem; padding:2px 10px; border-radius:12px; border:1px solid ", calidad_color, ";"),
+            act$calidad
+          ),
+          tags$span(style = "font-size:0.75rem; color:#64748b;",
+            paste0("\u226412 braz: ", act$pct_le11, "% · ",
+                   "\u226413 braz: ", act$pct_le13, "% · ",
+                   "\u226514 braz: ", act$pct_ge15, "%")
+          )
+        ),
+        tags$div(style = "font-size:0.75rem; color:#94a3b8; margin-top:2px;",
                  paste0(idx, " / ", n))
       )
     })
@@ -281,6 +313,22 @@ mod_charts_server <- function(id, summary_data, activities, laps, stroke_filter)
     })
 
     lap_plot <- function(df, y_col, y_lab, color_col = "estilo") {
+      act <- current_session()
+      fecha_str <- format(act$date, "%d %B %Y")
+      h <- floor(act$duration_min / 60)
+      m <- round(act$duration_min %% 60)
+      dur_str <- if (h > 0) sprintf("%dh %02dmin", h, m) else sprintf("%d min", m)
+
+      title_str <- paste0(fecha_str, "  ·  ", round(act$distance_m), " m  ·  ", dur_str,
+        if (!is.na(act$pace_100m)) paste0("  ·  ", format_pace(act$pace_100m), " /100m") else "")
+
+      subtitle_str <- if (!is.na(act$calidad) && !is.null(act$n_crol) && act$n_crol > 0) {
+        paste0("Sesión ", act$calidad,
+               "  |  \u226411: ", act$pct_le11, "%",
+               "  \u226413: ", act$pct_le13, "%",
+               "  \u226514: ", act$pct_ge15, "%  (crol)")
+      } else NULL
+
       gg <- ggplot(df, aes(x = largo, y = .data[[y_col]], color = .data[[color_col]])) +
         geom_line(linewidth = 1, show.legend = FALSE) +
         geom_point_interactive(
@@ -294,7 +342,7 @@ mod_charts_server <- function(id, summary_data, activities, laps, stroke_filter)
           "Braza" = swim_palette[["warning"]], "Mariposa" = swim_palette[["heart_avg"]],
           "Mixto" = swim_palette[["lighter"]], "Técnica" = swim_palette[["text_soft"]]
         )) +
-        labs(x = "Largo", y = y_lab) +
+        labs(x = "Largo", y = y_lab, title = title_str, subtitle = subtitle_str) +
         theme_swim()
       make_girafe(gg)
     }
@@ -335,6 +383,34 @@ mod_charts_server <- function(id, summary_data, activities, laps, stroke_filter)
 
 
     # ═══ RESUMEN ═══
+
+    quality_colors <- c(
+      "Muy buena" = "#06d6a0",
+      "Buena"     = "#0077b6",
+      "Regular"   = "#ffd166",
+      "Mala"      = "#e63946"
+    )
+
+    output$quality_period <- renderGirafe({
+      df <- quality_by_period(activities(), laps(), period = aggregation())
+      req(nrow(df) > 0)
+
+      gg <- ggplot(df, aes(x = period_date, y = pct, color = calidad, group = calidad)) +
+        geom_line(linewidth = 1.2) +
+        geom_point_interactive(
+          aes(tooltip = paste0(calidad, ": ", pct, "%\n(", n, " sesiones)"),
+              data_id = paste0(period_date, "_", calidad)),
+          size = 3
+        ) +
+        scale_color_manual(values = quality_colors) +
+        scale_x_date(date_labels = "%d %b", date_breaks = "2 weeks") +
+        scale_y_continuous(labels = function(x) paste0(x, "%"), limits = c(0, 100)) +
+        labs(x = NULL, y = "% sesiones", color = NULL) +
+        theme_swim() +
+        theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+      make_girafe(gg)
+    })
 
     output$distance <- renderGirafe({
       df <- summary_data()
@@ -475,7 +551,11 @@ mod_charts_server <- function(id, summary_data, activities, laps, stroke_filter)
               list(v = if (is.na(act$averageSwolf)) "\u2014" else act$averageSwolf, l = "SWOLF"),
               list(v = if (is.na(act$pace_100m))    "\u2014" else format_pace(act$pace_100m), l = "Ritmo /100m"),
               list(v = if (is.na(act$avg_brazadas)) "\u2014" else round(act$avg_brazadas, 1), l = "Brazadas/largo"),
-              list(v = if (is.na(act$largos))       "\u2014" else act$largos, l = "Largos")
+              list(v = if (is.na(act$largos))       "\u2014" else act$largos, l = "Largos"),
+              list(v = if (is.null(act$calidad) || is.na(act$calidad)) "\u2014" else act$calidad, l = "Calidad"),
+              list(v = if (is.null(act$pct_le11) || is.na(act$pct_le11)) "\u2014" else paste0(act$pct_le11, "%"), l = "\u226412 braz (crol)"),
+              list(v = if (is.null(act$pct_le13) || is.na(act$pct_le13)) "\u2014" else paste0(act$pct_le13, "%"), l = "\u226413 braz (crol)"),
+              list(v = if (is.null(act$pct_ge15) || is.na(act$pct_ge15)) "\u2014" else paste0(act$pct_ge15, "%"), l = "\u226515 braz (crol)")
             ),
             function(x) tags$div(
               style = "background:#f0f4f8; border-radius:8px; padding:10px 16px; text-align:center; min-width:90px;",

@@ -99,6 +99,19 @@ compute_brazadas_per_session <- function(activities, laps) {
   activities |> left_join(braz_by_act, by = "activityId")
 }
 
+quality_by_period <- function(activities, laps, period = "week") {
+  quality <- compute_session_quality(laps)
+  activities |>
+    left_join(quality, by = "activityId") |>
+    filter(!is.na(calidad)) |>
+    group_by(period_date = .data[[period]], calidad) |>
+    summarise(n = n(), .groups = "drop") |>
+    group_by(period_date) |>
+    mutate(pct = round(n / sum(n) * 100, 1)) |>
+    ungroup() |>
+    mutate(calidad = factor(calidad, levels = c("Mala", "Regular", "Buena", "Muy buena")))
+}
+
 summarise_by_period <- function(activities, period = "week") {
   activities |>
     group_by(period_date = .data[[period]]) |>
@@ -120,4 +133,27 @@ format_pace <- function(pace) {
   mins <- floor(pace)
   secs <- round((pace - mins) * 60)
   sprintf("%d:%02d", mins, secs)
+}
+
+#' Calcula % de largos crol por umbral de brazadas y clasifica la sesión
+compute_session_quality <- function(laps) {
+  laps |>
+    filter(lapType == "active", distance > 0, swimStroke == "freestyle") |>
+    group_by(activityId) |>
+    summarise(
+      n_crol      = n(),
+      pct_le11    = round(mean(brazadas <= 12, na.rm = TRUE) * 100, 1),
+      pct_le13    = round(mean(brazadas <= 13, na.rm = TRUE) * 100, 1),
+      pct_le14    = round(mean(brazadas <= 14, na.rm = TRUE) * 100, 1),
+      pct_ge15    = round(mean(brazadas >= 15, na.rm = TRUE) * 100, 1),
+      .groups = "drop"
+    ) |>
+    mutate(
+      calidad = case_when(
+        pct_le11 >= 50 ~ "Muy buena",
+        pct_le13 >= 40 ~ "Buena",
+        pct_le14 >= 50 ~ "Regular",
+        TRUE           ~ "Mala"
+      )
+    )
 }

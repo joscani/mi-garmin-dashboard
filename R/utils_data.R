@@ -92,9 +92,17 @@ compute_brazadas_per_session <- function(activities, laps) {
       min_brazadas  = min(brazadas, na.rm = TRUE),
       max_brazadas  = max(brazadas, na.rm = TRUE),
       med_brazadas  = median(brazadas, na.rm = TRUE),
+      iqr_brazadas  = IQR(brazadas, na.rm = TRUE),
       avg_swolf_lap = mean(swolf, na.rm = TRUE),
       avg_cadencia  = mean(cadencia, na.rm = TRUE),
       .groups = "drop"
+    ) |>
+    mutate(
+      consistencia = case_when(
+        iqr_brazadas <= 1 ~ "Alta",
+        iqr_brazadas <= 2 ~ "Media",
+        TRUE              ~ "Baja"
+      )
     )
   activities |> left_join(braz_by_act, by = "activityId")
 }
@@ -142,18 +150,28 @@ compute_session_quality <- function(laps) {
     group_by(activityId) |>
     summarise(
       n_crol      = n(),
-      pct_le11    = round(mean(brazadas <= 12, na.rm = TRUE) * 100, 1),
+      # categorías mutuamente excluyentes
+      n_buenos    = sum(brazadas <= 11, na.rm = TRUE),
+      n_normales  = sum(brazadas >= 12 & brazadas <= 13, na.rm = TRUE),
+      n_caros     = sum(brazadas >= 14, na.rm = TRUE),
+      # porcentajes heredados para clasificación
+      pct_le11    = round(mean(brazadas <= 11, na.rm = TRUE) * 100, 1),
       pct_le13    = round(mean(brazadas <= 13, na.rm = TRUE) * 100, 1),
       pct_le14    = round(mean(brazadas <= 14, na.rm = TRUE) * 100, 1),
-      pct_ge15    = round(mean(brazadas >= 15, na.rm = TRUE) * 100, 1),
+      pct_ge14    = round(mean(brazadas >= 14, na.rm = TRUE) * 100, 1),
       .groups = "drop"
     ) |>
     mutate(
+      pct_buenos   = round(n_buenos  / n_crol * 100, 1),
+      pct_normales = round(n_normales / n_crol * 100, 1),
+      pct_caros    = round(n_caros   / n_crol * 100, 1)
+    ) |>
+    mutate(
       calidad = case_when(
-        pct_le11 >= 50 ~ "Muy buena",
-        pct_le13 >= 40 ~ "Buena",
-        pct_le14 >= 50 ~ "Regular",
-        TRUE           ~ "Mala"
+        pct_buenos >= 50 ~ "Muy buena",
+        pct_le13   >= 40 ~ "Buena",
+        pct_le14   >= 50 ~ "Regular",
+        TRUE             ~ "Mala"
       )
     )
 }

@@ -50,6 +50,10 @@ mod_charts_ui <- function(id) {
           card_header("Distancia por sesión"),
           girafeOutput(ns("distance_session"), height = "480px", width = "100%")
         )
+      ),
+      card(full_screen = TRUE, class = "mt-3",
+        card_header("Tendencia de mediana de brazadas (crol)"),
+        girafeOutput(ns("median_trend"), height = "380px", width = "100%")
       )
     ),
 
@@ -225,6 +229,47 @@ mod_charts_server <- function(id, summary_data, activities, laps, stroke_filter,
       make_girafe(gg, selectable = TRUE)
     })
 
+    output$median_trend <- renderGirafe({
+      df <- sessions_ordered() |>
+        filter(!is.na(med_brazadas), !is.na(pct_buenos)) |>
+        arrange(date) |>
+        mutate(
+          tip = paste0(
+            format(date, "%d %b %y"),
+            "\nMediana: ", round(med_brazadas, 0), " braz",
+            "\nBuenos: ", pct_buenos, "%",
+            "\nCalidad: ", coalesce(calidad, "—")
+          )
+        )
+      req(nrow(df) > 0)
+
+      calidad_colors <- c(
+        "Muy buena" = "#15803d", "Buena" = "#0077b6",
+        "Regular"   = "#b45309", "Mala"  = "#b91c1c"
+      )
+
+      gg <- ggplot(df, aes(x = date, y = med_brazadas)) +
+        geom_line(color = swim_palette[["light"]], linewidth = 1) +
+        geom_smooth(method = "loess", formula = y ~ x, se = TRUE,
+                    color = swim_palette[["primary"]], fill = swim_palette[["lighter"]],
+                    alpha = 0.2, linewidth = 1.2, linetype = "solid") +
+        geom_point_interactive(
+          aes(tooltip = tip,
+              data_id  = as.character(activityId),
+              color    = coalesce(calidad, "—")),
+          size = 3.5
+        ) +
+        scale_color_manual(values = calidad_colors, name = "Calidad", na.value = "#94a3b8") +
+        scale_x_date(date_labels = "%d %b", date_breaks = "2 weeks") +
+        scale_y_continuous(breaks = scales::pretty_breaks()) +
+        labs(x = NULL, y = "Mediana brazadas/largo") +
+        theme_swim() +
+        theme(axis.text.x = element_text(angle = 45, hjust = 1),
+              legend.position = "top")
+
+      make_girafe(gg, selectable = TRUE)
+    })
+
     # ═══ POR LARGO ═══
 
     # Calidad por sesión (solo crol)
@@ -292,9 +337,9 @@ mod_charts_server <- function(id, summary_data, activities, laps, stroke_filter,
             act$calidad
           ),
           tags$span(style = "font-size:0.75rem; color:#64748b;",
-            paste0("\u226412 braz: ", act$pct_le11, "% · ",
-                   "\u226413 braz: ", act$pct_le13, "% · ",
-                   "\u226514 braz: ", act$pct_ge15, "%")
+            paste0("Buenos \u226411: ", act$pct_buenos, "% · ",
+                   "Normales 12-13: ", act$pct_normales, "% · ",
+                   "Caros \u226514: ", act$pct_caros, "%")
           )
         ),
         tags$div(style = "font-size:0.75rem; color:#94a3b8; margin-top:2px;",
@@ -324,9 +369,9 @@ mod_charts_server <- function(id, summary_data, activities, laps, stroke_filter,
 
       subtitle_str <- if (!is.na(act$calidad) && !is.null(act$n_crol) && act$n_crol > 0) {
         paste0("Sesión ", act$calidad,
-               "  |  \u226411: ", act$pct_le11, "%",
-               "  \u226413: ", act$pct_le13, "%",
-               "  \u226514: ", act$pct_ge15, "%  (crol)")
+               "  |  Buenos \u226411: ", act$pct_buenos, "%",
+               "  Normales 12-13: ", act$pct_normales, "%",
+               "  Caros \u226514: ", act$pct_caros, "%  (crol)")
       } else NULL
 
       gg <- ggplot(df, aes(x = largo, y = .data[[y_col]], color = .data[[color_col]])) +
@@ -524,13 +569,39 @@ mod_charts_server <- function(id, summary_data, activities, laps, stroke_filter,
 
     observeEvent(selected_act_id(), {
       req(selected_act_id())
-      act <- activities() |> filter(activityId == as.numeric(selected_act_id()))
+      act <- sessions_ordered() |> filter(activityId == as.numeric(selected_act_id()))
       req(nrow(act) > 0)
       act <- act[1, ]
 
       h <- floor(act$duration_min / 60)
       m <- round(act$duration_min %% 60)
       dur_str <- if (h > 0) sprintf("%dh %02dmin", h, m) else sprintf("%d min", m)
+
+      # Histórico: últimas 10 sesiones ANTERIORES a esta
+      hist10 <- sessions_ordered() |>
+        filter(date < act$date) |>
+        arrange(desc(date)) |>
+        head(10)
+
+      hist_med_braz <- if (nrow(hist10) > 0 && any(!is.na(hist10$med_brazadas)))
+        mean(hist10$med_brazadas, na.rm = TRUE) else NA
+      hist_pace     <- if (nrow(hist10) > 0 && any(!is.na(hist10$pace_100m)))
+        mean(hist10$pace_100m, na.rm = TRUE) else NA
+      hist_pct_buenos <- if (nrow(hist10) > 0 && any(!is.na(hist10$pct_buenos)))
+        mean(hist10$pct_buenos, na.rm = TRUE) else NA
+
+      # Genera etiqueta de delta: flecha + valor, con color
+      delta_tag <- function(val, ref, invert = FALSE, fmt = function(x) round(x, 1)) {
+        if (is.na(val) || is.na(ref)) return(tags$span())
+        diff <- val - ref
+        better <- if (invert) diff < 0 else diff > 0
+        arrow  <- if (diff > 0) "\u2191" else if (diff < 0) "\u2193" else "\u2013"
+        color  <- if (diff == 0) "#94a3b8" else if (better) "#15803d" else "#b91c1c"
+        tags$span(
+          style = paste0("font-size:0.7rem; font-weight:600; color:", color, "; margin-left:4px;"),
+          paste0(arrow, " ", fmt(abs(diff)))
+        )
+      }
 
       showModal(modalDialog(
         title = tags$span(
@@ -541,26 +612,129 @@ mod_charts_server <- function(id, summary_data, activities, laps, stroke_filter,
         easyClose = TRUE,
         footer = modalButton("Cerrar"),
 
-        # KPIs de la sesión
+        # ── Clasificación prominente ──────────────────────────────────────────
+        {
+          calidad_val <- if (is.null(act$calidad) || is.na(act$calidad)) NA else act$calidad
+          calidad_color <- switch(as.character(calidad_val),
+            "Muy buena" = "#15803d", "Buena" = "#0077b6",
+            "Regular"   = "#b45309", "Mala"  = "#b91c1c", "#64748b"
+          )
+          calidad_bg <- switch(as.character(calidad_val),
+            "Muy buena" = "#dcfce7", "Buena" = "#dbeafe",
+            "Regular"   = "#fef3c7", "Mala"  = "#fee2e2", "#f1f5f9"
+          )
+          tags$div(
+            style = "text-align:center; margin-bottom:14px;",
+            tags$div(
+              style = paste0("display:inline-block; background:", calidad_bg,
+                             "; color:", calidad_color,
+                             "; font-size:1.5rem; font-weight:800; border-radius:10px; padding:8px 28px;"),
+              if (is.na(calidad_val)) "\u2014" else calidad_val
+            )
+          )
+        },
+
+        # ── KPIs principales (fila 1) ─────────────────────────────────────────
         tags$div(
-          style = "display:flex; gap:16px; flex-wrap:wrap; margin-bottom:16px;",
+          style = "display:flex; gap:12px; flex-wrap:wrap; margin-bottom:12px;",
+
+          # Ritmo /100m (mejor = menor → invert = TRUE)
+          tags$div(
+            style = "background:#f0f4f8; border-radius:8px; padding:10px 16px; text-align:center; min-width:100px; flex:1;",
+            tags$div(
+              style = "font-size:1.25rem; font-weight:700; color:#0077b6;",
+              if (is.na(act$pace_100m)) "\u2014" else format_pace(act$pace_100m),
+              delta_tag(act$pace_100m, hist_pace, invert = TRUE,
+                        fmt = function(x) paste0(round(x * 60), "\""))
+            ),
+            tags$div(style = "font-size:0.75rem; color:#64748b;",
+                     if (!is.na(hist_pace)) paste0("Ritmo /100m  (ref ", format_pace(hist_pace), ")")
+                     else "Ritmo /100m")
+          ),
+
+          # Mediana brazadas (mejor = menor → invert = TRUE)
+          tags$div(
+            style = "background:#f0f4f8; border-radius:8px; padding:10px 16px; text-align:center; min-width:100px; flex:1;",
+            tags$div(
+              style = "font-size:1.25rem; font-weight:700; color:#0077b6;",
+              if (is.na(act$med_brazadas)) "\u2014" else round(act$med_brazadas, 0),
+              delta_tag(act$med_brazadas, hist_med_braz, invert = TRUE)
+            ),
+            tags$div(style = "font-size:0.75rem; color:#64748b;",
+                     if (!is.na(hist_med_braz)) paste0("Mediana braz  (ref ", round(hist_med_braz, 1), ")")
+                     else "Mediana braz")
+          ),
+
+          # % Buenos (mejor = mayor → invert = FALSE)
+          tags$div(
+            style = "background:#f0f4f8; border-radius:8px; padding:10px 16px; text-align:center; min-width:100px; flex:1;",
+            tags$div(
+              style = "font-size:1.25rem; font-weight:700; color:#0077b6;",
+              if (is.null(act$pct_buenos) || is.na(act$pct_buenos)) "\u2014"
+              else paste0(act$pct_buenos, "%"),
+              delta_tag(act$pct_buenos, hist_pct_buenos, invert = FALSE,
+                        fmt = function(x) paste0(round(x, 1), "%"))
+            ),
+            tags$div(style = "font-size:0.75rem; color:#64748b;",
+                     if (!is.na(hist_pct_buenos)) paste0("Buenos \u226411  (ref ", round(hist_pct_buenos, 1), "%)")
+                     else "Buenos (\u226411)")
+          ),
+
+          # Consistencia (sin delta — es etiqueta cualitativa)
+          tags$div(
+            style = "background:#f0f4f8; border-radius:8px; padding:10px 16px; text-align:center; min-width:100px; flex:1;",
+            tags$div(style = "font-size:1.25rem; font-weight:700; color:#0077b6;",
+                     if (is.null(act$consistencia) || is.na(act$consistencia)) "\u2014"
+                     else act$consistencia),
+            tags$div(style = "font-size:0.75rem; color:#64748b;", "Consistencia")
+          )
+        ),
+
+        # ── Desglose buenos / normales / caros ────────────────────────────────
+        {
+          has_desglose <- !is.null(act$n_buenos) && !is.na(act$n_buenos)
+          if (has_desglose) {
+            tags$div(
+              style = "display:flex; gap:10px; flex-wrap:wrap; margin-bottom:12px;",
+              tags$div(
+                style = "background:#dcfce7; border-radius:8px; padding:8px 16px; text-align:center; flex:1;",
+                tags$div(style = "font-size:1.1rem; font-weight:700; color:#15803d;",
+                         paste0(act$n_buenos, " largos")),
+                tags$div(style = "font-size:0.7rem; color:#166534;",
+                         paste0("Buenos \u226411   ", act$pct_buenos, "%"))
+              ),
+              tags$div(
+                style = "background:#fef9c3; border-radius:8px; padding:8px 16px; text-align:center; flex:1;",
+                tags$div(style = "font-size:1.1rem; font-weight:700; color:#92400e;",
+                         paste0(act$n_normales, " largos")),
+                tags$div(style = "font-size:0.7rem; color:#78350f;",
+                         paste0("Normales 12-13   ", act$pct_normales, "%"))
+              ),
+              tags$div(
+                style = "background:#fee2e2; border-radius:8px; padding:8px 16px; text-align:center; flex:1;",
+                tags$div(style = "font-size:1.1rem; font-weight:700; color:#b91c1c;",
+                         paste0(act$n_caros, " largos")),
+                tags$div(style = "font-size:0.7rem; color:#991b1b;",
+                         paste0("Caros \u226514   ", act$pct_caros, "%"))
+              )
+            )
+          } else tags$div()
+        },
+
+        # ── Datos básicos (fila 2) ────────────────────────────────────────────
+        tags$div(
+          style = "display:flex; gap:12px; flex-wrap:wrap; margin-bottom:16px;",
           lapply(
             list(
-              list(v = paste0(round(act$distance_m), " m"),       l = "Distancia"),
-              list(v = dur_str,                                    l = "Duración"),
-              list(v = if (is.na(act$averageSwolf)) "\u2014" else act$averageSwolf, l = "SWOLF"),
-              list(v = if (is.na(act$pace_100m))    "\u2014" else format_pace(act$pace_100m), l = "Ritmo /100m"),
-              list(v = if (is.na(act$avg_brazadas)) "\u2014" else round(act$avg_brazadas, 1), l = "Brazadas/largo"),
-              list(v = if (is.na(act$largos))       "\u2014" else act$largos, l = "Largos"),
-              list(v = if (is.null(act$calidad) || is.na(act$calidad)) "\u2014" else act$calidad, l = "Calidad"),
-              list(v = if (is.null(act$pct_le11) || is.na(act$pct_le11)) "\u2014" else paste0(act$pct_le11, "%"), l = "\u226412 braz (crol)"),
-              list(v = if (is.null(act$pct_le13) || is.na(act$pct_le13)) "\u2014" else paste0(act$pct_le13, "%"), l = "\u226413 braz (crol)"),
-              list(v = if (is.null(act$pct_ge15) || is.na(act$pct_ge15)) "\u2014" else paste0(act$pct_ge15, "%"), l = "\u226515 braz (crol)")
+              list(v = paste0(round(act$distance_m), " m"),        l = "Distancia"),
+              list(v = dur_str,                                     l = "Duración"),
+              list(v = if (is.na(act$largos)) "\u2014" else act$largos, l = "Largos"),
+              list(v = if (is.na(act$averageSwolf)) "\u2014" else act$averageSwolf, l = "SWOLF")
             ),
             function(x) tags$div(
-              style = "background:#f0f4f8; border-radius:8px; padding:10px 16px; text-align:center; min-width:90px;",
-              tags$div(style = "font-size:1.2rem; font-weight:700; color:#0077b6;", x$v),
-              tags$div(style = "font-size:0.75rem; color:#64748b;", x$l)
+              style = "background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:8px 16px; text-align:center; flex:1;",
+              tags$div(style = "font-size:1.1rem; font-weight:600; color:#334155;", x$v),
+              tags$div(style = "font-size:0.75rem; color:#94a3b8;", x$l)
             )
           )
         ),

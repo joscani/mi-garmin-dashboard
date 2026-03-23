@@ -1,0 +1,8 @@
+.env
+.garminconnect/
+token_privado
+.github/
+pyproject.toml
+uv.lock
+src/
+data/

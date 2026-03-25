@@ -27,8 +27,10 @@ def get_client() -> Garmin:
             client = Garmin()
             client.login(str(TOKEN_DIR))
             return client
-        except (GarminConnectAuthenticationError, GarminConnectTooManyRequestsError):
-            pass  # Tokens expirados o rate limit en el exchange, hacer login nuevo
+        except GarminConnectTooManyRequestsError:
+            raise  # No hacer login fresco si hay rate limit, empeoraría la situación
+        except GarminConnectAuthenticationError:
+            pass  # Tokens expirados, intentar login fresco
 
     # Login fresco
     if not email or not password:

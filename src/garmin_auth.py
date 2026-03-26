@@ -21,19 +21,14 @@ def get_client() -> Garmin:
     email = os.environ.get("GARMIN_EMAIL")
     password = os.environ.get("GARMIN_PASSWORD")
 
-    # Intentar reanudar sesión con tokens guardados
+    # Intentar reanudar sesión con tokens guardados (sin validación de red)
     if TOKEN_DIR.exists():
         try:
             client = Garmin()
-            client.login(str(TOKEN_DIR))
+            client.garth.load(str(TOKEN_DIR))
             return client
-        except GarminConnectTooManyRequestsError:
-            # Los tokens ya están cargados en memoria aunque falle la validación.
-            # Devolver el cliente tal cual — las llamadas reales pueden funcionar.
-            print("Rate limit durante validación de tokens, usando tokens cargados sin validar.")
-            return client
-        except GarminConnectAuthenticationError:
-            pass  # Tokens expirados, intentar login fresco
+        except Exception:
+            pass  # Tokens corruptos o inexistentes, intentar login fresco
 
     # Login fresco
     if not email or not password:

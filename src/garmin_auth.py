@@ -28,7 +28,10 @@ def get_client() -> Garmin:
             client.login(str(TOKEN_DIR))
             return client
         except GarminConnectTooManyRequestsError:
-            raise  # No hacer login fresco si hay rate limit, empeoraría la situación
+            # Los tokens ya están cargados en memoria aunque falle la validación.
+            # Devolver el cliente tal cual — las llamadas reales pueden funcionar.
+            print("Rate limit durante validación de tokens, usando tokens cargados sin validar.")
+            return client
         except GarminConnectAuthenticationError:
             pass  # Tokens expirados, intentar login fresco
 

@@ -8,10 +8,14 @@ Dashboard interactivo en R/Shiny para visualizar tus actividades de natación de
 
 ## ¿Qué hace?
 
-- Descarga tus actividades de natación de Garmin Connect via Python
+- Descarga tus actividades de natación de Garmin Connect via Python, separando cada largo individual
 - Visualiza KPIs (distancia, SWOLF, ritmo, brazadas, tiempo activo)
 - Gráficos de evolución temporal interactivos (clicables para ver detalle de sesión)
-- Análisis largo a largo de cada sesión (brazadas, SWOLF, estilo)
+- Análisis largo a largo de cada sesión con bandas de calidad (≤11, 12-13, ≥14 brazadas)
+- Clasificación automática de sesiones: Muy buena / Buena / Regular / Mala (basada en % de largos de crol por franja de brazadas)
+- Scatter interactivo brazadas vs ritmo /100m con boxplot por valor, vinculado a los filtros
+- Calendario de actividad tipo GitHub (metros por día, verde escalonado)
+- Selector de fechas moderno con navegación año → mes → día
 - Filtros por rango de fechas y tipo de brazada
 - Actualización automática de datos via GitHub Actions (dos veces al día)
 
@@ -169,6 +173,7 @@ rsconnect::deployApp(
 | App web | R + [Shiny](https://shiny.posit.co/) |
 | UI | [bslib](https://rstudio.github.io/bslib/) (Bootstrap 5) |
 | Gráficos | [ggplot2](https://ggplot2.tidyverse.org/) + [ggiraph](https://davidgohel.github.io/ggiraph/) |
+| Widgets UI | [shinyWidgets](https://dreamrs.github.io/shinyWidgets/) |
 | Tablas | [DT](https://rstudio.github.io/DT/) |
 | Dependencias R | [renv](https://rstudio.github.io/renv/) |
 | Dependencias Python | [uv](https://docs.astral.sh/uv/) |

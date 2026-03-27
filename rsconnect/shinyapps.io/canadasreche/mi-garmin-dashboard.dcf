@@ -5,6 +5,6 @@ account: canadasreche
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 16955355
-bundleId: 11751917
+bundleId: 11770547
 url: https://canadasreche.shinyapps.io/mi-garmin-dashboard/
 version: 1

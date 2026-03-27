@@ -1,14 +1,21 @@
 #' Módulo de filtros
 
+library(shinyWidgets)
+
 mod_filters_ui <- function(id) {
   ns <- NS(id)
   tagList(
-    dateRangeInput(
+    airDatepickerInput(
       ns("date_range"), "Periodo",
-      start     = Sys.Date() - 365,
-      end       = Sys.Date(),
-      language  = "es",
-      separator = " a "
+      value    = c(Sys.Date() - 365, Sys.Date()),
+      range    = TRUE,
+      multiple = TRUE,
+      language = "es",
+      separator = " – ",
+      addon    = "none",
+      view     = "days",
+      minView  = "days",
+      autoClose = TRUE
     ),
     selectInput(
       ns("aggregation"), "Agrupar por",

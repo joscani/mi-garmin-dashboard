@@ -59,7 +59,12 @@ load_laps <- function(path = "data/swimming_laps.csv", bust_cache = FALSE) {
       swimStroke = tolower(coalesce(swimStroke, "unknown")),
       brazadas   = totalNumberOfStrokes,
       swolf      = averageSWOLF,
-      cadencia   = averageSwimCadence
+      cadencia   = averageSwimCadence,
+      pace_100m  = if_else(
+        lapType == "active" & distance > 0 & !is.na(duration),
+        (duration / 60) / (distance / 100),
+        NA_real_
+      )
     )
   .data_cache$laps <- d
   d

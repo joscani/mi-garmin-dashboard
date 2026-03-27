@@ -25,12 +25,29 @@ custom_css <- "
     font-weight: 600; color: #1a1a2e;
     padding: 12px 16px;
   }
-  .bslib-value-box { border-radius: 12px; }
-  .bslib-value-box .value-box-title { font-size: 0.78rem; opacity: 0.75; }
-  .bslib-value-box .value-box-value { font-size: 1.4rem; font-weight: 700; }
+  .bslib-value-box {
+    border-radius: 12px;
+    min-height: 100px;
+  }
+  .bslib-value-box .value-box-title {
+    font-size: clamp(0.65rem, 1.5vw, 0.82rem);
+    opacity: 0.80;
+    white-space: nowrap;
+  }
+  .bslib-value-box .value-box-value {
+    font-size: clamp(1.1rem, 3vw, 1.6rem);
+    font-weight: 700;
+    line-height: 1.2;
+    word-break: break-word;
+  }
+  .bslib-value-box .value-box-showcase {
+    font-size: clamp(1.2rem, 3vw, 1.6rem);
+  }
   .nav-tabs .nav-link.active { font-weight: 600; border-bottom: 3px solid #00b4d8; }
-  @media (max-width: 768px) {
+  @media (max-width: 576px) {
+    .bslib-value-box .value-box-title { font-size: 0.7rem; }
     .bslib-value-box .value-box-value { font-size: 1.1rem; }
+    .sidebar { display: none; }
   }
 "
 

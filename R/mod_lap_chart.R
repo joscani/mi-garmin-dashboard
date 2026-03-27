@@ -30,13 +30,33 @@ mod_lap_chart_server <- function(id, data, y_col, y_lab, session_info) {
       )
 
       subtitle_str <- if (!is.na(act$calidad) && !is.null(act$n_crol) && act$n_crol > 0) {
-        paste0("Sesión ", act$calidad,
-               "  |  Buenos \u226411: ", act$pct_buenos, "%",
-               "  Normales 12-13: ", act$pct_normales, "%",
-               "  Caros \u226514: ", act$pct_caros, "%  (crol)")
+        calidad_icon <- switch(act$calidad,
+          "Buena"   = "\u2705",
+          "Regular" = "\u26a0\ufe0f",
+          "Floja"   = "\u274c",
+          ""
+        )
+        paste0(
+          calidad_icon, " Sesi\u00f3n ", act$calidad,
+          "  (crol: ", act$n_crol, " largos)\n",
+          "\u2264\u202f11 brazadas: ", act$pct_buenos, "%  \u00b7  ",
+          "12\u201313: ", act$pct_normales, "%  \u00b7  ",
+          "\u2265\u202f14: ", act$pct_caros, "%"
+        )
       } else NULL
 
+      x_min <- min(df$largo, na.rm = TRUE)
+      x_max <- max(df$largo, na.rm = TRUE)
+
       gg <- ggplot(df, aes(x = largo, y = .data[[y_col]], color = estilo)) +
+        { if (y_col == "brazadas") list(
+            annotate("rect", xmin = x_min - 0.5, xmax = x_max + 0.5, ymin = -Inf, ymax = 11.5,
+                     fill = swim_palette[["success"]], alpha = 0.10),
+            annotate("rect", xmin = x_min - 0.5, xmax = x_max + 0.5, ymin = 11.5, ymax = 13.5,
+                     fill = swim_palette[["warning"]], alpha = 0.10),
+            annotate("rect", xmin = x_min - 0.5, xmax = x_max + 0.5, ymin = 13.5, ymax = Inf,
+                     fill = "#e74c3c", alpha = 0.10)
+          ) else NULL } +
         geom_line(linewidth = 1, show.legend = FALSE) +
         geom_point_interactive(
           aes(tooltip = paste0("Largo ", largo,

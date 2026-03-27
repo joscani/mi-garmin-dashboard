@@ -27,7 +27,7 @@ theme_swim <- function(base_size = 13) {
       axis.text        = element_text(color = "#64748b", size = rel(0.85)),
       axis.title       = element_text(color = "#1a1a2e", size = rel(0.9), face = "bold"),
       plot.title       = element_text(color = "#1a1a2e", size = rel(1.1), face = "bold", margin = margin(b = 8)),
-      plot.subtitle    = element_text(color = "#64748b", size = rel(0.85), margin = margin(b = 12)),
+      plot.subtitle    = element_text(color = "#64748b", size = rel(0.88), lineheight = 1.5, margin = margin(b = 14)),
       legend.position  = "bottom",
       legend.text      = element_text(color = "#1a1a2e", size = rel(0.85)),
       legend.title     = element_blank(),

@@ -34,12 +34,13 @@ ACTIVITY_FIELDS = [
 LAP_FIELDS = [
     "activityId",
     "lapIndex",
+    "lapActiveLengths",
+    "lengthIndex",
     "lapType",
     "distance",
     "duration",
     "averageSWOLF",
     "totalNumberOfStrokes",
-    "averageStrokes",
     "averageSwimCadence",
     "swimStroke",
     "averageHR",
@@ -79,33 +80,57 @@ def fetch_activities(client, start_date: str, end_date: str) -> list[dict]:
 
 
 def fetch_laps(client, activity_id: int) -> list[dict]:
-    """Obtiene los laps/splits de una actividad, clasificando activos vs descanso."""
+    """Obtiene los largos individuales de una actividad desanidando lengthDTOs."""
     try:
         splits = client.get_activity_splits(activity_id)
         laps_raw = splits.get("lapDTOs", [])
-        laps = []
-        for i, lap in enumerate(laps_raw):
-            distance = lap.get("distance", 0) or 0
-            strokes = lap.get("totalNumberOfStrokes", 0) or 0
-            # Lap activo = tiene distancia > 0
-            lap_type = "active" if distance > 0 else "rest"
-            laps.append(
-                {
-                    "activityId": activity_id,
-                    "lapIndex": i,
-                    "lapType": lap_type,
-                    "distance": distance,
-                    "duration": lap.get("duration"),
-                    "averageSWOLF": lap.get("averageSWOLF"),
-                    "totalNumberOfStrokes": strokes,
-                    "averageStrokes": lap.get("averageStrokes"),
-                    "averageSwimCadence": lap.get("averageSwimCadence"),
-                    "swimStroke": lap.get("swimStroke"),
-                    "averageHR": lap.get("averageHR"),
-                    "maxHR": lap.get("maxHR"),
-                }
-            )
-        return laps
+        rows = []
+        for lap in laps_raw:
+            lap_index = lap.get("lapIndex")
+            lap_active_lengths = lap.get("numberOfActiveLengths", 0) or 0
+            lengths = lap.get("lengthDTOs", [])
+            if not lengths:
+                # Lap sin lengths (ej. descanso sin movimiento): una fila con datos del lap
+                distance = lap.get("distance", 0) or 0
+                rows.append(
+                    {
+                        "activityId": activity_id,
+                        "lapIndex": lap_index,
+                        "lapActiveLengths": lap_active_lengths,
+                        "lengthIndex": None,
+                        "lapType": "rest",
+                        "distance": distance,
+                        "duration": lap.get("duration"),
+                        "averageSWOLF": lap.get("averageSWOLF"),
+                        "totalNumberOfStrokes": 0,
+                        "averageSwimCadence": lap.get("averageSwimCadence"),
+                        "swimStroke": lap.get("swimStroke"),
+                        "averageHR": lap.get("averageHR"),
+                        "maxHR": lap.get("maxHR"),
+                    }
+                )
+            else:
+                for length in lengths:
+                    distance = length.get("distance", 0) or 0
+                    lap_type = "active" if distance > 0 else "rest"
+                    rows.append(
+                        {
+                            "activityId": activity_id,
+                            "lapIndex": lap_index,
+                            "lapActiveLengths": lap_active_lengths,
+                            "lengthIndex": length.get("lengthIndex"),
+                            "lapType": lap_type,
+                            "distance": distance,
+                            "duration": length.get("duration"),
+                            "averageSWOLF": length.get("averageSWOLF"),
+                            "totalNumberOfStrokes": length.get("totalNumberOfStrokes", 0) or 0,
+                            "averageSwimCadence": length.get("averageSwimCadence"),
+                            "swimStroke": length.get("swimStroke"),
+                            "averageHR": length.get("averageHR"),
+                            "maxHR": length.get("maxHR"),
+                        }
+                    )
+        return rows
     except Exception as e:
         print(f"  Error obteniendo laps para {activity_id}: {e}")
         return []

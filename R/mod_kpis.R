@@ -8,17 +8,17 @@ mod_kpis_ui <- function(id) {
   layout_column_wrap(
     width = "180px", fixed_width = FALSE, heights_equal = "row",
     value_box(title = "Sesiones", value = textOutput(ns("sessions")),
-      showcase = bs_icon("water"), theme = "primary", max_height = "120px"),
+      showcase = bs_icon("water"), theme = "primary"),
     value_box(title = "Distancia", value = textOutput(ns("distance")),
-      showcase = bs_icon("signpost-2"), theme = "info", max_height = "120px"),
+      showcase = bs_icon("signpost-2"), theme = "info"),
     value_box(title = "SWOLF", value = textOutput(ns("swolf")),
-      showcase = bs_icon("speedometer"), theme = "success", max_height = "120px"),
+      showcase = bs_icon("speedometer"), theme = "success"),
     value_box(title = "Ritmo /100m", value = textOutput(ns("pace")),
-      showcase = bs_icon("stopwatch"), theme = "warning", max_height = "120px"),
+      showcase = bs_icon("stopwatch"), theme = "warning"),
     value_box(title = "Brazadas/largo", value = textOutput(ns("strokes")),
-      showcase = bs_icon("arrow-repeat"), theme = "primary", max_height = "120px"),
+      showcase = bs_icon("arrow-repeat"), theme = "primary"),
     value_box(title = "Tiempo activo", value = textOutput(ns("active_time")),
-      showcase = bs_icon("clock-history"), theme = "info", max_height = "120px")
+      showcase = bs_icon("clock-history"), theme = "info")
   )
 }
 

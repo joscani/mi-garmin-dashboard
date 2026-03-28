@@ -11,6 +11,11 @@ mod_sesiones_ui <- function(id) {
         uiOutput(ns("session_title")),
         actionButton(ns("next_session"), label = NULL, icon = icon("chevron-right"),
                      class = "btn btn-outline-secondary btn-sm")
+      ),
+      div(
+        style = "padding:4px 12px 8px;",
+        sliderInput(ns("skip_laps"), "Ignorar primeros largos",
+                    min = 0, max = 20, value = 0, step = 1, width = "100%")
       )
     ),
     layout_column_wrap(
@@ -46,7 +51,7 @@ mod_sesiones_server <- function(id, activities, active_laps, sessions_ordered) {
     })
 
     output$session_title <- renderUI({
-      act <- current_session()
+      act <- session_info_filtered()
       n   <- nrow(sessions_ordered())
       idx <- session_idx()
       h <- floor(act$duration_min / 60)
@@ -94,21 +99,63 @@ mod_sesiones_server <- function(id, activities, active_laps, sessions_ordered) {
         mutate(
           largo  = row_number(),
           estilo = coalesce(stroke_labels[swimStroke], swimStroke)
+        ) |>
+        filter(largo > input$skip_laps)
+    })
+
+    session_info_filtered <- reactive({
+      act  <- current_session()
+      laps <- session_laps()
+
+      # Recalcular ritmo con los largos filtrados
+      dur_sec  <- sum(laps$duration,  na.rm = TRUE)
+      dist_m   <- sum(laps$distance,  na.rm = TRUE)
+      pace     <- if (dist_m > 0) (dur_sec / 60) / (dist_m / 100) else NA_real_
+
+      # Recalcular calidad sobre crol filtrado
+      crol <- laps |> filter(swimStroke == "freestyle", !is.na(brazadas))
+      n_crol <- nrow(crol)
+
+      if (n_crol > 0) {
+        n_buenos   <- sum(crol$brazadas <= 11)
+        n_normales <- sum(crol$brazadas >= 12 & crol$brazadas <= 13)
+        n_caros    <- sum(crol$brazadas >= 14)
+        pct_buenos   <- round(n_buenos   / n_crol * 100, 1)
+        pct_normales <- round(n_normales / n_crol * 100, 1)
+        pct_caros    <- round(n_caros    / n_crol * 100, 1)
+        pct_le13     <- round((n_buenos + n_normales) / n_crol * 100, 1)
+        pct_le14     <- round((n_buenos + n_normales + n_caros) / n_crol * 100, 1)
+        calidad <- dplyr::case_when(
+          pct_buenos >= 50 ~ "Muy buena",
+          pct_le13   >= 40 ~ "Buena",
+          pct_le14   >= 50 ~ "Regular",
+          TRUE             ~ "Mala"
         )
+        act$n_crol      <- n_crol
+        act$pct_buenos  <- pct_buenos
+        act$pct_normales <- pct_normales
+        act$pct_caros   <- pct_caros
+        act$calidad     <- calidad
+      } else {
+        act$n_crol <- 0L
+      }
+
+      act$pace_100m <- pace
+      act
     })
 
     mod_lap_chart_server("strokes_range",
       data         = reactive(session_laps() |> filter(!is.na(brazadas))),
       y_col        = "brazadas",
       y_lab        = "Brazadas",
-      session_info = current_session
+      session_info = session_info_filtered
     )
 
     mod_lap_chart_server("swolf_range",
       data         = reactive(session_laps() |> filter(!is.na(swolf))),
       y_col        = "swolf",
       y_lab        = "SWOLF",
-      session_info = current_session
+      session_info = session_info_filtered
     )
 
     # scatter: único, se queda custom

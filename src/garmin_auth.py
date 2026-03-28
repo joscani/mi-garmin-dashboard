@@ -12,8 +12,8 @@ from garminconnect import (
 
 TOKEN_DIR = Path(__file__).parent.parent / ".garminconnect"
 
-MAX_RETRIES = 5
-INITIAL_WAIT = 30  # segundos
+MAX_RETRIES = 1
+INITIAL_WAIT = 10  # segundos
 
 
 def _refresh_with_backoff(client: Garmin) -> bool:

@@ -12,7 +12,7 @@ from garminconnect import (
 
 TOKEN_DIR = Path(__file__).parent.parent / ".garminconnect"
 
-INITIAL_WAIT = 10  # segundos
+RETRY_WAIT = 120  # segundos de espera antes del único reintento por 429
 
 
 class GarminRateLimitError(RuntimeError):
@@ -22,17 +22,24 @@ class GarminRateLimitError(RuntimeError):
 def _refresh_oauth2(client: Garmin) -> None:
     """Refresca el oauth2 usando el oauth1 token (no pasa por SSO).
 
-    Si Garmin devuelve 429 incluso aquí, lanza GarminRateLimitError
-    para que el caller pueda decidir sin caer al login completo.
+    Si Garmin devuelve 429, espera RETRY_WAIT segundos y lo intenta una vez más.
+    Si vuelve a fallar, lanza GarminRateLimitError.
     """
-    try:
-        client.garth.refresh_oauth2()
-        client.garth.dump(str(TOKEN_DIR))
-        print("Token oauth2 refrescado correctamente.")
-    except Exception as e:
-        if "429" in str(e):
-            raise GarminRateLimitError("Rate limit en refresh_oauth2 (429)") from e
-        raise
+    for attempt in (1, 2):
+        try:
+            client.garth.refresh_oauth2()
+            client.garth.dump(str(TOKEN_DIR))
+            print("Token oauth2 refrescado correctamente.")
+            return
+        except Exception as e:
+            if "429" in str(e):
+                if attempt == 1:
+                    print(f"Rate limit (429), esperando {RETRY_WAIT}s antes de reintentar...")
+                    time.sleep(RETRY_WAIT)
+                else:
+                    raise GarminRateLimitError("Rate limit en refresh_oauth2 (429) tras reintento") from e
+            else:
+                raise
 
 
 def get_client() -> Garmin:

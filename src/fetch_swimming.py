@@ -1,13 +1,14 @@
 """Descarga actividades de natación de Garmin Connect y las guarda como CSV para R."""
 
 import csv
+import sys
 import time
 from datetime import date
 from pathlib import Path
 
 from dotenv import load_dotenv
 
-from garmin_auth import get_client
+from garmin_auth import GarminRateLimitError, get_client
 
 DATA_DIR = Path(__file__).parent.parent / "data"
 ACTIVITIES_CSV = DATA_DIR / "swimming_activities.csv"
@@ -195,4 +196,8 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except GarminRateLimitError as e:
+        print(f"⚠ Rate limit de Garmin, reintentando en la próxima ejecución: {e}")
+        sys.exit(75)  # EX_TEMPFAIL: fallo temporal, no romper el workflow

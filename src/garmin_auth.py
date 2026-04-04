@@ -4,40 +4,30 @@ import os
 import time
 from pathlib import Path
 
-from garminconnect import (
-    Garmin,
-    GarminConnectAuthenticationError,
-    GarminConnectTooManyRequestsError,
-)
+from garminconnect import Garmin
 
 TOKEN_DIR = Path(__file__).parent.parent / ".garminconnect"
 
 RETRY_WAIT = 120  # segundos de espera antes del único reintento por 429
-
-
 class GarminRateLimitError(RuntimeError):
     """Garmin SSO está bloqueando por rate limit (429)."""
 
 
-def _refresh_oauth2(client: Garmin) -> None:
-    """Refresca el oauth2 usando el oauth1 token (no pasa por SSO).
-
-    Si Garmin devuelve 429, espera RETRY_WAIT segundos y lo intenta una vez más.
-    Si vuelve a fallar, lanza GarminRateLimitError.
-    """
+def _try_refresh_oauth2(client: Garmin) -> bool:
+    """Intenta refrescar oauth2. Devuelve True si lo consigue, False si 429."""
     for attempt in (1, 2):
         try:
             client.garth.refresh_oauth2()
             client.garth.dump(str(TOKEN_DIR))
             print("Token oauth2 refrescado correctamente.")
-            return
+            return True
         except Exception as e:
             if "429" in str(e):
                 if attempt == 1:
                     print(f"Rate limit (429), esperando {RETRY_WAIT}s antes de reintentar...")
                     time.sleep(RETRY_WAIT)
                 else:
-                    raise GarminRateLimitError("Rate limit en refresh_oauth2 (429) tras reintento") from e
+                    return False
             else:
                 raise
 
@@ -45,11 +35,13 @@ def _refresh_oauth2(client: Garmin) -> None:
 def get_client() -> Garmin:
     """Devuelve un cliente autenticado de Garmin Connect.
 
-    Estrategia:
+    Estrategia con cron cada 12h:
     1. Cargar tokens guardados.
-    2. Si oauth2 expirado, refrescar via oauth1 (sin SSO).
-    3. Si el refresh falla por 429, abortar — no intentar login SSO.
-    4. Solo si no hay tokens en absoluto, hacer login fresco con email/password.
+    2. Siempre intentar refrescar el token (para renovar las ~21h de vida).
+    3. Si el refresh falla por 429 pero el token aún no ha expirado →
+       usarlo tal cual (la próxima ejecución en 12h lo reintentará).
+    4. Si el token ya expiró Y el refresh falló → GarminRateLimitError.
+    5. Solo si no hay tokens → login fresco con email/password.
     """
     email = os.environ.get("GARMIN_EMAIL")
     password = os.environ.get("GARMIN_PASSWORD")
@@ -58,9 +50,19 @@ def get_client() -> Garmin:
         client = Garmin()
         client.garth.load(str(TOKEN_DIR))
 
-        if client.garth.oauth2_token.expired:
-            print("Token oauth2 expirado, refrescando via oauth1...")
-            _refresh_oauth2(client)  # lanza GarminRateLimitError si 429
+        expired = client.garth.oauth2_token.expired
+        remaining_h = (client.garth.oauth2_token.expires_at - int(time.time())) / 3600
+        print(f"Token oauth2: {'expirado' if expired else f'válido ({remaining_h:.1f}h restantes)'}")
+        print("Intentando refrescar token...")
+
+        refreshed = _try_refresh_oauth2(client)
+
+        if not refreshed and expired:
+            raise GarminRateLimitError(
+                "Token expirado y refresh bloqueado por 429"
+            )
+        if not refreshed:
+            print("Refresh falló por 429, pero el token aún es válido. Continuando.")
 
         return client
 

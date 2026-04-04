@@ -2,7 +2,8 @@ name: Actualizar datos de natación
 
 on:
   schedule:
-    - cron: "31 10 * * *"   # 12:31 hora España verano (UTC+2) / 11:31 invierno (UTC+1)
+    - cron: "31 4 * * *"    # ~06:31 hora España (mañana)
+    - cron: "31 16 * * *"   # ~18:31 hora España (tarde)
   workflow_dispatch:        # También se puede lanzar manualmente desde GitHub
 
 jobs:
@@ -32,10 +33,14 @@ jobs:
           cp /tmp/garmin-data/.garminconnect/* .garminconnect/
 
       - name: Descargar datos de Garmin Connect
+        id: fetch
         env:
           GARMIN_EMAIL:    ${{ secrets.GARMIN_EMAIL }}
           GARMIN_PASSWORD: ${{ secrets.GARMIN_PASSWORD }}
-        run: uv run python src/fetch_swimming.py
+        run: |
+          uv run python src/fetch_swimming.py
+          echo "ok=true" >> "$GITHUB_OUTPUT"
+        continue-on-error: true
 
       - name: Guardar tokens actualizados en repo privado
         env:
@@ -46,10 +51,11 @@ jobs:
           git config user.email "github-actions@github.com"
           git config user.name "GitHub Actions"
           git add .garminconnect/
-          git diff --cached --quiet || git commit -m "Actualizar tokens Garmin $(date '+%Y-%m-%d')"
+          git diff --cached --quiet || git commit -m "Actualizar tokens Garmin $(date '+%Y-%m-%d %H:%M')"
           git push
 
       - name: Subir CSVs al repo privado de datos
+        if: steps.fetch.outputs.ok == 'true'
         run: |
           cp data/swimming_activities.csv /tmp/garmin-data/
           cp data/swimming_laps.csv /tmp/garmin-data/

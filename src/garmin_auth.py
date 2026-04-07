@@ -58,8 +58,14 @@ def get_client() -> Garmin:
         refreshed = _try_refresh_oauth2(client)
 
         if not refreshed and expired:
+            if email and password:
+                print("Token expirado y refresh bloqueado por 429, intentando login fresco...")
+                client = Garmin(email, password)
+                client.login()
+                client.garth.dump(str(TOKEN_DIR))
+                return client
             raise GarminRateLimitError(
-                "Token expirado y refresh bloqueado por 429"
+                "Token expirado y refresh bloqueado por 429 (sin credenciales para login fresco)"
             )
         if not refreshed:
             print("Refresh falló por 429, pero el token aún es válido. Continuando.")

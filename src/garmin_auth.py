@@ -5,10 +5,13 @@ import time
 from pathlib import Path
 
 from garminconnect import Garmin
+from garth import sso as garth_sso
 
 TOKEN_DIR = Path(__file__).parent.parent / ".garminconnect"
 
 RETRY_WAIT = 120  # segundos de espera antes del único reintento por 429
+
+
 class GarminRateLimitError(RuntimeError):
     """Garmin SSO está bloqueando por rate limit (429)."""
 
@@ -32,6 +35,22 @@ def _try_refresh_oauth2(client: Garmin) -> bool:
                 raise
 
 
+def _try_exchange_oauth1(client: Garmin) -> bool:
+    """Obtiene un nuevo oauth2 usando el oauth1 (no pasa por SSO, evita 429).
+    Devuelve True si lo consigue, False si falla."""
+    try:
+        print("Intentando exchange oauth1 -> oauth2 (sin SSO)...")
+        new_oauth2 = garth_sso.exchange(client.garth.oauth1_token, client.garth)
+        client.garth.oauth2_token = new_oauth2
+        client.garth.dump(str(TOKEN_DIR))
+        remaining_h = (new_oauth2.expires_at - time.time()) / 3600
+        print(f"Exchange exitoso. Nuevo token válido por {remaining_h:.1f}h")
+        return True
+    except Exception as e:
+        print(f"Exchange oauth1 falló: {e}")
+        return False
+
+
 def get_client() -> Garmin:
     """Devuelve un cliente autenticado de Garmin Connect.
 
@@ -40,8 +59,9 @@ def get_client() -> Garmin:
     2. Siempre intentar refrescar el token (para renovar las ~21h de vida).
     3. Si el refresh falla por 429 pero el token aún no ha expirado →
        usarlo tal cual (la próxima ejecución en 12h lo reintentará).
-    4. Si el token ya expiró Y el refresh falló → GarminRateLimitError.
-    5. Solo si no hay tokens → login fresco con email/password.
+    4. Si el token ya expiró Y el refresh falló → intentar exchange oauth1→oauth2.
+    5. Si el exchange también falla → login fresco con email/password.
+    6. Solo si no hay tokens → login fresco con email/password.
     """
     email = os.environ.get("GARMIN_EMAIL")
     password = os.environ.get("GARMIN_PASSWORD")
@@ -58,8 +78,14 @@ def get_client() -> Garmin:
         refreshed = _try_refresh_oauth2(client)
 
         if not refreshed and expired:
+            # Fallback 1: exchange oauth1 -> oauth2 sin pasar por SSO
+            if client.garth.oauth1_token:
+                if _try_exchange_oauth1(client):
+                    return client
+
+            # Fallback 2: login fresco con email/password
             if email and password:
-                print("Token expirado y refresh bloqueado por 429, intentando login fresco...")
+                print("Token expirado y exchange fallido, intentando login fresco...")
                 try:
                     client = Garmin(email, password)
                     client.login()
@@ -68,11 +94,11 @@ def get_client() -> Garmin:
                 except Exception as e:
                     if "429" in str(e):
                         raise GarminRateLimitError(
-                            "Token expirado, refresh y login fresco bloqueados por 429"
+                            "Token expirado, exchange y login fresco bloqueados por 429"
                         ) from e
                     raise
             raise GarminRateLimitError(
-                "Token expirado y refresh bloqueado por 429 (sin credenciales para login fresco)"
+                "Token expirado, exchange fallido y sin credenciales para login fresco"
             )
         if not refreshed:
             print("Refresh falló por 429, pero el token aún es válido. Continuando.")

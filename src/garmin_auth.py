@@ -1,6 +1,7 @@
 """Autenticación con Garmin Connect con persistencia de tokens."""
 
 import os
+import random
 import time
 from pathlib import Path
 
@@ -9,7 +10,8 @@ from garth import sso as garth_sso
 
 TOKEN_DIR = Path(__file__).parent.parent / ".garminconnect"
 
-RETRY_WAIT = 120  # segundos de espera antes del único reintento por 429
+RETRY_WAIT = 180  # segundos de espera antes del único reintento por 429
+INITIAL_JITTER_MAX = 120  # jitter aleatorio antes de autenticar (segundos)
 
 
 class GarminRateLimitError(RuntimeError):
@@ -27,8 +29,9 @@ def _try_refresh_oauth2(client: Garmin) -> bool:
         except Exception as e:
             if "429" in str(e):
                 if attempt == 1:
-                    print(f"Rate limit (429), esperando {RETRY_WAIT}s antes de reintentar...")
-                    time.sleep(RETRY_WAIT)
+                    wait = RETRY_WAIT + random.randint(0, 60)
+                    print(f"Rate limit (429), esperando {wait}s antes de reintentar...")
+                    time.sleep(wait)
                 else:
                     return False
             else:
@@ -66,13 +69,21 @@ def get_client() -> Garmin:
     email = os.environ.get("GARMIN_EMAIL")
     password = os.environ.get("GARMIN_PASSWORD")
 
+    # Jitter aleatorio para evitar que runners de GH Actions golpeen Garmin SSO al mismo tiempo
+    if os.environ.get("CI"):
+        jitter = random.randint(0, INITIAL_JITTER_MAX)
+        print(f"CI detectado, esperando {jitter}s de jitter antes de autenticar...")
+        time.sleep(jitter)
+
     if TOKEN_DIR.exists():
         client = Garmin()
         client.garth.load(str(TOKEN_DIR))
 
+        has_oauth1 = client.garth.oauth1_token is not None
         expired = client.garth.oauth2_token.expired
         remaining_h = (client.garth.oauth2_token.expires_at - int(time.time())) / 3600
         print(f"Token oauth2: {'expirado' if expired else f'válido ({remaining_h:.1f}h restantes)'}")
+        print(f"Token oauth1: {'presente' if has_oauth1 else 'NO disponible'}")
         print("Intentando refrescar token...")
 
         refreshed = _try_refresh_oauth2(client)

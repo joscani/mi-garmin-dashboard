@@ -2,8 +2,8 @@ name: Actualizar datos de natación
 
 on:
   schedule:
-    - cron: "31 4 * * *"    # ~06:31 hora España (mañana)
-    - cron: "31 16 * * *"   # ~18:31 hora España (tarde)
+    - cron: "17 5 * * *"    # ~07:17 hora España (mañana)
+    - cron: "43 15 * * *"   # ~17:43 hora España (tarde)
   workflow_dispatch:        # También se puede lanzar manualmente desde GitHub
 
 jobs:

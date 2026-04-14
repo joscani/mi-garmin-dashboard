@@ -80,8 +80,9 @@ ui <- page_sidebar(
   navset_card_underline(
     id = "main_tabs",
     nav_panel("Evolución", div(class = "py-2", charts_ui$evolucion)),
-    nav_panel("Sesiones", div(class = "py-2", charts_ui$laps)),
+    nav_panel("Sesiones",  div(class = "py-2", charts_ui$laps)),
     nav_panel("Resumen",   div(class = "py-2", charts_ui$resumen)),
+    nav_panel("Comparar",  div(class = "py-2", charts_ui$comparar)),
     nav_panel("Datos",     div(class = "py-2", mod_table_ui("table")))
   )
 )

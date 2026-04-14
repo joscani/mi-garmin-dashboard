@@ -107,10 +107,13 @@ mod_sesiones_server <- function(id, activities, active_laps, sessions_ordered) {
       act  <- current_session()
       laps <- session_laps()
 
-      # Recalcular ritmo con los largos filtrados
+      # Recalcular ritmo y SWOLF con los largos filtrados
       dur_sec  <- sum(laps$duration,  na.rm = TRUE)
       dist_m   <- sum(laps$distance,  na.rm = TRUE)
       pace     <- if (dist_m > 0) (dur_sec / 60) / (dist_m / 100) else NA_real_
+
+      swolf_filt <- mean(laps$swolf, na.rm = TRUE)
+      act$averageSwolf <- if (is.nan(swolf_filt) || is.na(swolf_filt)) NA_real_ else round(swolf_filt, 1)
 
       # Recalcular calidad sobre crol filtrado
       crol <- laps |> filter(swimStroke == "freestyle", !is.na(brazadas))

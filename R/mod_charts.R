@@ -14,6 +14,7 @@ source("R/mod_lap_chart.R")
 source("R/mod_charts_evolucion.R")
 source("R/mod_charts_sesiones.R")
 source("R/mod_charts_resumen.R")
+source("R/mod_charts_comparar.R")
 
 CHART_W <- 10
 CHART_H <- 5
@@ -39,7 +40,8 @@ mod_charts_ui <- function(id) {
   list(
     evolucion = mod_evolucion_ui(ns("evolucion")),
     laps      = mod_sesiones_ui(ns("sesiones")),
-    resumen   = mod_resumen_ui(ns("resumen"))
+    resumen   = mod_resumen_ui(ns("resumen")),
+    comparar  = mod_comparar_ui(ns("comparar"))
   )
 }
 
@@ -69,5 +71,6 @@ mod_charts_server <- function(id, summary_data, activities, laps, stroke_filter,
     mod_evolucion_server("evolucion", activities, sessions_ordered, laps)
     mod_sesiones_server("sesiones",   activities, active_laps, sessions_ordered)
     mod_resumen_server("resumen",     summary_data, activities, laps, aggregation)
+    mod_comparar_server("comparar",   sessions_ordered, active_laps)
   })
 }

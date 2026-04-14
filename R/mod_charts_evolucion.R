@@ -151,6 +151,12 @@ mod_evolucion_server <- function(id, activities, sessions_ordered, laps) {
       m <- round(act$duration_min %% 60)
       dur_str <- if (h > 0) sprintf("%dh %02dmin", h, m) else sprintf("%d min", m)
 
+      ht <- floor(coalesce(act$duration_total_min, NA_real_) / 60)
+      mt <- round(coalesce(act$duration_total_min, NA_real_) %% 60)
+      dur_total_str <- if (!is.na(act$duration_total_min))
+        (if (ht > 0) sprintf("%dh %02dmin", ht, mt) else sprintf("%d min", mt))
+      else "\u2014"
+
       hist10 <- sessions_ordered() |>
         filter(date < act$date) |> arrange(desc(date)) |> head(10)
 
@@ -260,7 +266,8 @@ mod_evolucion_server <- function(id, activities, sessions_ordered, laps) {
         tags$div(style = "display:flex; gap:12px; flex-wrap:wrap; margin-bottom:16px;",
           lapply(list(
             list(v = paste0(round(act$distance_m), " m"), l = "Distancia"),
-            list(v = dur_str,                              l = "Duración"),
+            list(v = dur_str,                              l = "T. activo"),
+            list(v = dur_total_str,                        l = "T. total"),
             list(v = if (is.na(act$largos)) "\u2014" else act$largos, l = "Largos"),
             list(v = if (is.na(act$averageSwolf)) "\u2014" else act$averageSwolf, l = "SWOLF")
           ), function(x) tags$div(

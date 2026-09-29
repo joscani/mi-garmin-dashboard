@@ -119,15 +119,25 @@ construir_preguntas <- function(periodos) {
     sesion_b = jev_choice(paste(
       "Si la `peticion` compara dos sesiones, ¿cuál es la segunda que menciona?",
       "Si no la concreta, es la penúltima sesión."), ROLES_SESION),
-    # El periodo puede acotar solo una de las dos: en «la de hoy frente a la
-    # más rápida de enero», «de enero» solo acota la segunda.
-    periodo_alcance = jev_choice(paste(
-      "La `peticion` compara dos sesiones y menciona un periodo de tiempo.",
-      "¿A qué sesiones se refiere ese periodo? En español, un periodo escrito junto",
-      "a una sola de las sesiones ('la de mejor SWOLF de enero') acota solo esa."),
-      c(ambas   = "El periodo acota las dos sesiones que se comparan",
-        primera = "El periodo acota solo la primera sesión que se menciona",
-        segunda = "El periodo acota solo la segunda sesión que se menciona"))
+    # Cada sesión comparada tiene su propio periodo: en «la más rápida de abril
+    # con la mejor de septiembre» hay dos, y en «la de hoy frente a la más
+    # rápida de enero» solo acota la segunda.
+    periodo_a_pedido = jev_noul(paste(
+      "La `peticion` compara dos sesiones. ¿La primera que menciona está acotada a un",
+      "periodo de tiempo? Cuenta un periodo escrito junto a ella ('la más rápida de abril')",
+      "o uno que se aplica a las dos ('la más rápida y la más lenta de marzo'); no cuenta",
+      "un periodo escrito solo junto a la otra sesión.")),
+    periodo_a = jev_choice(paste(
+      "¿En qué periodo hay que buscar la primera sesión que compara la `peticion`?",
+      "La fecha de hoy está en `hoy`."), vapply(periodos, `[[`, "", "desc")),
+    periodo_b_pedido = jev_noul(paste(
+      "La `peticion` compara dos sesiones. ¿La segunda que menciona está acotada a un",
+      "periodo de tiempo? Cuenta un periodo escrito junto a ella ('la mejor de septiembre')",
+      "o uno que se aplica a las dos ('la más rápida y la más lenta de marzo'); no cuenta",
+      "un periodo escrito solo junto a la otra sesión.")),
+    periodo_b = jev_choice(paste(
+      "¿En qué periodo hay que buscar la segunda sesión que compara la `peticion`?",
+      "La fecha de hoy está en `hoy`."), vapply(periodos, `[[`, "", "desc"))
   )
 }
 
@@ -274,15 +284,15 @@ mod_pregunta_server <- function(id, activities_all, date_range, filters, set_tab
       }
 
       if (comparar) {
-        # Cada sesión se busca en el periodo solo si Jev dice que la acota;
+        # Cada sesión se busca en su propio periodo si Jev dice que lo tiene;
         # si no, entre todas las sesiones
-        candidatas <- function(aplica) {
-          if (is.null(periodo) || !aplica) return(acts)
-          acts |> filter(date >= periodo$rango[1], date <= periodo$rango[2])
+        candidatas <- function(pedido, eleccion) {
+          if (pedido$noul < 0.5) return(acts)
+          rango <- periodos[[eleccion$choice]]$rango
+          acts |> filter(date >= rango[1], date <= rango[2])
         }
-        alcance <- r$periodo_alcance$choice
-        id_a <- resolver_rol(candidatas(alcance %in% c("ambas", "primera")), r$sesion_a$choice)
-        id_b <- resolver_rol(candidatas(alcance %in% c("ambas", "segunda")), r$sesion_b$choice)
+        id_a <- resolver_rol(candidatas(r$periodo_a_pedido, r$periodo_a), r$sesion_a$choice)
+        id_b <- resolver_rol(candidatas(r$periodo_b_pedido, r$periodo_b), r$sesion_b$choice)
         if (is.null(id_a) || is.null(id_b)) {
           hecho <- c(hecho, "No hay suficientes sesiones en el periodo para comparar")
         } else {

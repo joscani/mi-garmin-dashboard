@@ -17,3 +17,4 @@ build/
 renv/library/
 renv/staging/
 renv/cellar/
+scripts/update_garmin.log

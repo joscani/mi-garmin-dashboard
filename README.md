@@ -17,6 +17,7 @@ Dashboard interactivo en R/Shiny para visualizar tus actividades de natación de
 - Calendario de actividad tipo GitHub (metros por día, verde escalonado)
 - Selector de fechas moderno con navegación año → mes → día
 - Filtros por rango de fechas y tipo de brazada
+- **Pregúntale al panel** (opcional): cambia filtros, pestañas y compara sesiones escribiendo en lenguaje natural, con [Jev](https://docs.typesafe.ai) de TypeSafe
 - Actualización automática de datos via GitHub Actions (dos veces al día)
 
 ## Arquitectura
@@ -42,6 +43,8 @@ Los datos CSV y los tokens de Garmin se guardan en un **repositorio privado sepa
 │   ├── mod_charts.R             # Módulo: gráficos (evolución, por largo, resumen)
 │   ├── mod_filters.R            # Módulo: filtros laterales
 │   ├── mod_table.R              # Módulo: tabla de actividades
+│   ├── mod_pregunta.R           # Módulo: «Pregúntale al panel» (Jev)
+│   ├── utils_jev.R              # Cliente HTTP de TypeSafe y límites de uso
 │   ├── utils_data.R             # Carga, caché y transformación de datos
 │   └── utils_charts.R           # Tema ggplot2 y paleta de colores
 ├── src/
@@ -138,6 +141,9 @@ El token `DATA_GITHUB_PAT` también debe estar disponible para la app. Como las 
 
 ```bash
 echo "DATA_GITHUB_PAT=tu_token" > .Renviron
+# opcional, para «Pregúntale al panel»:
+echo "TYPESAFE_API_KEY=tu_clave" >> .Renviron
+echo "TYPESAFE_APP_PASSWORD=una_contraseña_larga" >> .Renviron
 ```
 
 ```r
@@ -149,19 +155,57 @@ rsconnect::setAccountInfo(
   secret = "TU_SECRET"
 )
 
-rsconnect::deployApp(
-  appFiles = c(
-    "app.R",
-    "R/mod_charts.R", "R/mod_filters.R", "R/mod_kpis.R",
-    "R/mod_table.R", "R/utils_charts.R", "R/utils_data.R",
-    ".Renviron"
-  ),
-  appName = "mi-garmin-dashboard",
-  account = "tu_usuario"
-)
+# .rscignore deja fuera la parte Python (src/, data/, tokens...)
+rsconnect::deployApp(appName = "mi-garmin-dashboard", account = "tu_usuario")
 ```
 
 > El `.Renviron` está en `.gitignore` — nunca se sube al repo.
+
+## Pregúntale al panel (Jev)
+
+Tarjeta encima de las pestañas donde escribes lo que quieres ver y el panel se ajusta solo. Usa **Jev**, el modelo *System One* de [TypeSafe](https://docs.typesafe.ai), que no genera texto: devuelve respuestas tipadas (sí/no con probabilidad, o una opción de una lista).
+
+### Qué puede hacer
+
+| Acción | Ejemplos |
+|---|---|
+| Cambiar el periodo | «enséñame marzo», «las últimas 4 semanas», «este año», «todo el historial» |
+| Agrupar | «agrupa por meses», «semana a semana» |
+| Filtrar por estilo | «solo crol», «los largos de braza» |
+| Abrir una pestaña | «llévame al resumen», «quiero ver la tabla de datos», «cómo he evolucionado» |
+| Comparar dos sesiones | «compara la última con la penúltima», «la más rápida de marzo frente a la más lenta de marzo» |
+| Varias a la vez | «crol de los últimos 3 meses agrupado por semanas» |
+
+Para comparar, cada sesión se describe por su papel: la última, la penúltima, la de menos / más brazadas por largo, la de mejor / peor SWOLF, la más rápida / lenta, la más larga / corta. Un periodo puede acotar las dos o solo una: en «compara la última con la de menos brazadas de marzo», *la última* es la más reciente de todas y *de marzo* solo acota la segunda.
+
+**Ejemplo:** «compara la última con la de menos brazadas de marzo» → abre *Comparar* con la sesión del 27 de septiembre frente a la del 10 de marzo, y lo indica debajo:
+
+> Comparar: la última sesión (27 septiembre 2026) vs la de menos brazadas por largo (10 marzo 2026)
+
+### Qué no hace
+
+- **No responde preguntas con datos** («¿cuántos metros nadé ayer?», «¿estoy mejorando?»): solo cambia lo que se ve. Como mucho te lleva al periodo mencionado.
+- No elige un día concreto («la sesión del 12 de marzo») ni filtra por pulso, calorías, etc.
+- Si no encuentra nada que hacer, responde «No sé hacer eso».
+
+### Cómo funciona
+
+Cada pregunta es **una sola llamada** a la API de TypeSafe con tu texto y la fecha de hoy, y 10 preguntas que Jev contesta en paralelo (`construir_preguntas()` en `R/mod_pregunta.R`): si menciona un periodo y cuál, si pide agrupar y cómo, estilo, pestaña, si pide comparar, qué dos sesiones y a cuál acota el periodo.
+
+Jev **solo elige entre opciones que genera el código** (periodos candidatos, papeles de sesión…); R decide qué aplicar (umbral 0,5 en cada sí/no), busca qué sesión concreta es «la de menos brazadas» y cambia filtros y pestañas. Jev nunca inventa fechas ni ids.
+
+### Configuración y coste
+
+La tarjeta **solo aparece** si están definidas estas variables (en `.Renviron`, que va en el despliegue y está en `.gitignore`):
+
+| Variable | Uso |
+|---|---|
+| `TYPESAFE_API_KEY` | Clave de TypeSafe. Solo se usa en el servidor, nunca llega al navegador |
+| `TYPESAFE_APP_PASSWORD` | Contraseña para desbloquear la tarjeta (5 intentos por sesión) |
+| `TYPESAFE_MAX_POR_SESION` | Preguntas por sesión de navegador (defecto 10) |
+| `TYPESAFE_MAX_POR_DIA` | Preguntas al día entre todos los usuarios (defecto 50) |
+
+Cada pregunta cuesta una llamada a TypeSafe. El contador diario vive en memoria: si shinyapps.io reinicia la app, vuelve a cero, así que es una red de seguridad, no un tope exacto. Textos de más de 200 caracteres se rechazan.
 
 ## Tecnologías
 
@@ -173,6 +217,7 @@ rsconnect::deployApp(
 | App web | R + [Shiny](https://shiny.posit.co/) |
 | UI | [bslib](https://rstudio.github.io/bslib/) (Bootstrap 5) |
 | Gráficos | [ggplot2](https://ggplot2.tidyverse.org/) + [ggiraph](https://davidgohel.github.io/ggiraph/) |
+| Lenguaje natural (opcional) | [TypeSafe](https://docs.typesafe.ai) — modelo Jev |
 | Widgets UI | [shinyWidgets](https://dreamrs.github.io/shinyWidgets/) |
 | Tablas | [DT](https://rstudio.github.io/DT/) |
 | Dependencias R | [renv](https://rstudio.github.io/renv/) |

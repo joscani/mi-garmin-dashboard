@@ -6,7 +6,9 @@ library(bsicons)
 mod_kpis_ui <- function(id) {
   ns <- NS(id)
   layout_column_wrap(
-    width = "180px", fixed_width = FALSE, heights_equal = "row",
+    width = "300px", fixed_width = FALSE, heights_equal = "row",
+    # Altura natural: si no, page_sidebar las aplasta al repartir la altura
+    fill = FALSE,
     value_box(title = "Sesiones", value = textOutput(ns("sessions")),
       showcase = bs_icon("water"), theme = "primary"),
     value_box(title = "Distancia", value = textOutput(ns("distance")),

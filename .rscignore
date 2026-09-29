@@ -6,3 +6,8 @@ pyproject.toml
 uv.lock
 src
 data
+scripts
+ejemplo_jev.py
+ejemplo_jev_syn.py
+CLAUDE.md
+.claude

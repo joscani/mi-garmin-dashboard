@@ -10,6 +10,8 @@ source("R/mod_filters.R")
 source("R/mod_kpis.R")
 source("R/mod_charts.R")
 source("R/mod_table.R")
+source("R/utils_jev.R")
+source("R/mod_pregunta.R")
 
 custom_css <- "
   body { background-color: #f0f4f8; }
@@ -28,6 +30,7 @@ custom_css <- "
   .bslib-value-box {
     border-radius: 12px;
     min-height: 100px;
+    max-height: 120px;
   }
   .bslib-value-box .value-box-title {
     font-size: clamp(0.65rem, 1.5vw, 0.82rem);
@@ -77,6 +80,9 @@ ui <- page_sidebar(
 
   mod_kpis_ui("kpis"),
 
+  # Solo aparece si hay TYPESAFE_API_KEY y TYPESAFE_APP_PASSWORD
+  if (jev_disponible()) mod_pregunta_ui("pregunta"),
+
   navset_card_underline(
     id = "main_tabs",
     nav_panel("Evolución", div(class = "py-2", charts_ui$evolucion)),
@@ -120,8 +126,21 @@ server <- function(input, output, session) {
   })
 
   mod_kpis_server("kpis", activities_filtered)
-  mod_charts_server("charts", summary_data, activities_filtered, laps_filtered, filters$stroke_filter, filters$aggregation)
+  compare_request <- reactiveVal(NULL)
+  mod_charts_server("charts", summary_data, activities_filtered, laps_filtered, filters$stroke_filter, filters$aggregation,
+                    compare_request)
   mod_table_server("table", activities_filtered)
+
+  if (jev_disponible()) {
+    mod_pregunta_server("pregunta",
+      activities_all = reactive(raw_data()$activities),
+      date_range     = filters$date_range,
+      filters        = filters$set,
+      set_tab        = function(tab) nav_select("main_tabs", tab, session = session),
+      # nonce: que la misma petición repetida vuelva a disparar el observer
+      set_compare    = function(a, b) compare_request(list(a = as.character(a), b = as.character(b), nonce = Sys.time()))
+    )
+  }
 }
 
 shinyApp(ui, server)

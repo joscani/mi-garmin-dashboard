@@ -39,8 +39,24 @@ mod_comparar_ui <- function(id) {
   )
 }
 
-mod_comparar_server <- function(id, sessions_ordered, active_laps) {
+mod_comparar_server <- function(id, sessions_ordered, active_laps, compare_request = reactive(NULL)) {
   moduleServer(id, function(input, output, session) {
+
+    # Selección pedida desde fuera (mod_pregunta). Si las sesiones aún no están
+    # en el selector (p. ej. porque también cambia el periodo), se aplica
+    # cuando se actualicen las opciones.
+    pending <- reactiveVal(NULL)
+
+    observeEvent(compare_request(), {
+      req_ab <- compare_request()
+      ids <- as.character(sessions_ordered()$activityId)
+      if (all(c(req_ab$a, req_ab$b) %in% ids)) {
+        updateSelectInput(session, "session_a", selected = req_ab$a)
+        updateSelectInput(session, "session_b", selected = req_ab$b)
+      } else {
+        pending(req_ab)
+      }
+    })
 
     # Etiqueta compacta para el selector
     make_label <- function(row) {
@@ -56,10 +72,15 @@ mod_comparar_server <- function(id, sessions_ordered, active_laps) {
         as.character(df$activityId),
         vapply(seq_len(nrow(df)), function(i) make_label(df[i, ]), character(1))
       )
-      updateSelectInput(session, "session_a", choices = choices,
-                        selected = if (length(choices) >= 1) choices[[1]] else NULL)
-      updateSelectInput(session, "session_b", choices = choices,
-                        selected = if (length(choices) >= 2) choices[[2]] else NULL)
+      sel_a <- if (length(choices) >= 1) choices[[1]] else NULL
+      sel_b <- if (length(choices) >= 2) choices[[2]] else NULL
+      p <- isolate(pending())
+      if (!is.null(p) && all(c(p$a, p$b) %in% choices)) {
+        sel_a <- p$a; sel_b <- p$b
+        pending(NULL)
+      }
+      updateSelectInput(session, "session_a", choices = choices, selected = sel_a)
+      updateSelectInput(session, "session_b", choices = choices, selected = sel_b)
     })
 
     get_session <- function(id_str) {

@@ -39,7 +39,13 @@ mod_filters_server <- function(id) {
       date_range   = reactive(input$date_range),
       aggregation  = reactive(input$aggregation),
       stroke_filter = reactive(input$stroke_filter),
-      refresh      = reactive(input$refresh)
+      refresh      = reactive(input$refresh),
+      # Setters para cambiar los filtros desde otros módulos (mod_pregunta)
+      set = list(
+        date_range  = function(v) updateAirDateInput(session, "date_range", value = v),
+        aggregation = function(v) updateSelectInput(session, "aggregation", selected = v),
+        stroke      = function(v) updateSelectInput(session, "stroke_filter", selected = v)
+      )
     )
   })
 }

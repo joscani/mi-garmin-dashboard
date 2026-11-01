@@ -20,6 +20,8 @@
 - KPIs con `showcase_layout = "top right"` tras ver que a 190 px bslib apilaba el icono.
 - Autorrevisión del diff en lugar de subagente.
 
-**Fallos abiertos:** B6 sin prueba interactiva; Jev sin prueba real; fechas en inglés (locale, ya pasaba antes); sin desplegar.
+5. Aceptado por el usuario: merge a master (`016ec07`), deploy a shinyapps.io (190 sesiones, 0 errores JS), arreglo de `.rscignore` (`22024aa`) y push. Rama `mejoras-dashboard` y worktree base eliminados.
 
-**Siguiente acción:** el usuario revisa la comparativa. Si la acepta: merge a master y `rsconnect::deployApp(...)`. Si no: revertir lo que no guste (p. ej. `fillable = FALSE`) en la rama.
+**Fallos abiertos:** B6 sin prueba interactiva; Jev sin prueba real; fechas en inglés (locale, ya pasaba antes); el bundle publicado incluye `mejoras/` hasta el próximo deploy.
+
+**Siguiente acción:** ninguna obligatoria. En el próximo deploy, comprobar que `mejoras/` ya no entra en el bundle.

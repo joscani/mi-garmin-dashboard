@@ -25,4 +25,8 @@ Método: `Rscript mejoras/verificar.R` (salida en `mejoras/verificar_salida.txt`
 - B6 no se ha probado interactivamente con el datepicker.
 - La tarjeta «Pregúntale al panel» no se ha probado con llamadas reales a Jev (no ha cambiado su código, pero ahora recibe la página con scroll).
 - Las fechas salen en inglés («24 October 2026», «Jan 26»): depende del locale del servidor. Ya pasaba en la base y no se ha tocado.
-- No se ha desplegado en shinyapps.io.
+
+## Despliegue (2026-11-01)
+- Merge a master (fast-forward, `016ec07`) y deploy a shinyapps.io: la versión publicada carga 190 sesiones y da 0 errores JS.
+- `.rscignore` corregido después (`22024aa`, `mejoras` sin barra final). El bundle publicado aún incluye `mejoras/` (solo documentación) hasta el próximo deploy.
+- Push a `origin/master` hecho.

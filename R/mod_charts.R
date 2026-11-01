@@ -16,8 +16,10 @@ source("R/mod_charts_sesiones.R")
 source("R/mod_charts_resumen.R")
 source("R/mod_charts_comparar.R")
 
-CHART_W <- 10
-CHART_H <- 5
+# Tamaño en pulgadas del SVG; se reescala al ancho de la tarjeta. Con 10x5 el
+# texto quedaba diminuto al encoger a media pantalla.
+CHART_W <- 7.5
+CHART_H <- 4.5
 
 gi_opts    <- opts_sizing(rescale = TRUE, width = 1)
 gi_hover   <- opts_hover(css = "fill-opacity:0.9; stroke-width:2;")

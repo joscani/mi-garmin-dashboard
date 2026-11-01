@@ -35,3 +35,53 @@ theme_swim <- function(base_size = 13) {
       plot.margin      = margin(10, 15, 10, 10)
     )
 }
+
+# Colores únicos de calidad de sesión y de estilo (usados en todos los gráficos y badges)
+calidad_colors <- c(
+  "Muy buena" = "#15803d", "Buena" = "#0077b6",
+  "Regular"   = "#b45309", "Mala"  = "#b91c1c"
+)
+calidad_bg <- c(
+  "Muy buena" = "#dcfce7", "Buena" = "#dbeafe",
+  "Regular"   = "#fef3c7", "Mala"  = "#fee2e2"
+)
+calidad_icon <- c(
+  "Muy buena" = "\U0001F31F", "Buena" = "✅",
+  "Regular"   = "⚠️", "Mala" = "❌"
+)
+
+stroke_colors <- c(
+  "Crol"     = swim_palette[["primary"]],
+  "Espalda"  = swim_palette[["success"]],
+  "Braza"    = swim_palette[["warning"]],
+  "Mariposa" = swim_palette[["heart_avg"]],
+  "Mixto"    = swim_palette[["lighter"]],
+  "Técnica"  = swim_palette[["text_soft"]]
+)
+
+# Color de calidad con valor por defecto para NA / desconocido
+color_calidad <- function(cal, tabla = calidad_colors, defecto = "#64748b") {
+  if (length(cal) == 0 || is.na(cal) || !cal %in% names(tabla)) defecto else tabla[[cal]]
+}
+
+#' Minutos → "1h 05min" / "42 min" ("—" si NA)
+format_duration <- function(mins) {
+  if (is.null(mins) || length(mins) == 0 || is.na(mins)) return("—")
+  h <- floor(mins / 60); m <- round(mins %% 60)
+  if (h > 0) sprintf("%dh %02dmin", h, m) else sprintf("%d min", m)
+}
+
+#' Eje X de fechas con cortes según el rango (evita 26 etiquetas giradas en un año)
+scale_x_fecha <- function(fechas) {
+  dias <- as.numeric(diff(range(fechas, na.rm = TRUE)))
+  if (!is.finite(dias)) dias <- 0
+  if (dias <= 45) {
+    scale_x_date(date_labels = "%d %b", date_breaks = "1 week")
+  } else if (dias <= 120) {
+    scale_x_date(date_labels = "%d %b", date_breaks = "2 weeks")
+  } else if (dias <= 550) {
+    scale_x_date(date_labels = "%b %y", date_breaks = "1 month")
+  } else {
+    scale_x_date(date_labels = "%b %y", date_breaks = "3 months")
+  }
+}

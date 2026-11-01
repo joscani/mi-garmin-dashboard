@@ -27,11 +27,15 @@ custom_css <- "
     font-weight: 600; color: #1a1a2e;
     padding: 12px 16px;
   }
-  .bslib-value-box {
-    border-radius: 12px;
-    min-height: 100px;
-    max-height: 120px;
+  .bslib-value-box { border-radius: 12px; }
+  .bslib-value-box .value-box-area { padding: 12px 14px !important; }
+  .kpi-delta { margin-top: 4px; }
+  .kpi-delta span {
+    display: inline-block; font-size: 0.72rem; font-weight: 600;
+    padding: 1px 8px; border-radius: 10px; background: rgba(0,0,0,0.18); color: #fff;
   }
+  .kpi-delta span.kpi-mejor { background: rgba(21,128,61,0.9); }
+  .kpi-delta span.kpi-peor  { background: rgba(185,28,28,0.85); }
   .bslib-value-box .value-box-title {
     font-size: clamp(0.65rem, 1.5vw, 0.82rem);
     opacity: 0.80;
@@ -46,17 +50,21 @@ custom_css <- "
   .bslib-value-box .value-box-showcase {
     font-size: clamp(1.2rem, 3vw, 1.6rem);
   }
-  .nav-tabs .nav-link.active { font-weight: 600; border-bottom: 3px solid #00b4d8; }
+  .nav-underline .nav-link { color: #475569; }
+  .nav-underline .nav-link:hover { color: #0077b6; }
+  .nav-underline .nav-link.active { color: #023e8a; font-weight: 600; }
   @media (max-width: 576px) {
     .bslib-value-box .value-box-title { font-size: 0.7rem; }
     .bslib-value-box .value-box-value { font-size: 1.1rem; }
-    .sidebar { display: none; }
   }
 "
 
 charts_ui <- mod_charts_ui("charts")
 
 ui <- page_sidebar(
+  # Scroll natural de página: en modo «fillable» los KPIs y la tarjeta de Jev se
+  # comían la altura y los gráficos quedaban en una franja con scroll interno
+  fillable = FALSE,
   title = tags$span(
     style = "display:flex; align-items:center; gap:8px;",
     tags$span("\U0001F3CA", style = "font-size:22px;"),
@@ -105,14 +113,34 @@ server <- function(input, output, session) {
     list(activities = acts, laps = lps)
   }
 
-  observe({ raw_data(load_all()) })
+  # Si falla la carga se avisa en pantalla y se conservan los datos que hubiera
+  cargar <- function(bust = FALSE) {
+    d <- tryCatch(load_all(bust), error = function(e) {
+      showNotification(paste("No se pudieron cargar los datos:", conditionMessage(e)),
+                       type = "error", duration = NULL)
+      NULL
+    })
+    if (!is.null(d)) {
+      raw_data(d)
+      if (bust) showNotification("Datos recargados", type = "message", duration = 3)
+    }
+  }
+
+  observe(cargar())
 
   filters <- mod_filters_server("filters")
-  observeEvent(filters$refresh(), { raw_data(load_all(bust = TRUE)) })
+  observeEvent(filters$refresh(), cargar(bust = TRUE), ignoreInit = TRUE)
+
+  # Mientras se elige el rango en el calendario solo hay una fecha: no filtrar aún
+  date_range_ok <- reactive({
+    dr <- as.Date(filters$date_range())
+    req(length(dr) == 2, !anyNA(dr))
+    sort(dr)
+  })
 
   activities_filtered <- reactive({
     req(raw_data())
-    dr <- filters$date_range()
+    dr <- date_range_ok()
     raw_data()$activities |> filter(date >= dr[1], date <= dr[2])
   })
 
@@ -125,7 +153,9 @@ server <- function(input, output, session) {
     summarise_by_period(activities_filtered(), filters$aggregation())
   })
 
-  mod_kpis_server("kpis", activities_filtered)
+  mod_kpis_server("kpis", activities_filtered,
+                  activities_all = reactive({ req(raw_data()); raw_data()$activities }),
+                  date_range     = date_range_ok)
   compare_request <- reactiveVal(NULL)
   mod_charts_server("charts", summary_data, activities_filtered, laps_filtered, filters$stroke_filter, filters$aggregation,
                     compare_request)

@@ -1,0 +1,16 @@
+PASA  CSV sin avisos de parseo (0 avisos) 
+PASA  averageSwimCadence conserva los valores del CSV 
+PASA  calidad Sesiones == global en 190/190 sesiones 
+PASA  Sesiones puede dar «Mala» (31) 
+    Buena      Mala Muy buena   Regular 
+      103        31        37        19 
+PASA  format_pace(2.999) == 3:00 
+PASA  ningún «:60» en datos reales 
+PASA  format_duration con NA/NULL/65 
+PASA  color_calidad con NA 
+PASA  kpi_delta_tag sin datos → NULL 
+PASA  SWOLF menor = mejor 
+PASA  modal se reabre al reclicar la misma sesión (3 clics → 3 aperturas) 
+PASA  periodo anterior con 60 sesiones 
+PASA  delta SWOLF: ↓ 2.2 vs periodo anterior 
+     ritmo: ↓ 3" vs periodo anterior | distancia: ↑ 4% vs periodo anterior 

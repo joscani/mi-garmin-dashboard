@@ -54,13 +54,8 @@ mod_sesiones_server <- function(id, activities, active_laps, sessions_ordered) {
       act <- session_info_filtered()
       n   <- nrow(sessions_ordered())
       idx <- session_idx()
-      h <- floor(act$duration_min / 60)
-      m <- round(act$duration_min %% 60)
-      dur_str <- if (h > 0) sprintf("%dh %02dmin", h, m) else sprintf("%d min", m)
-
-      calidad_color <- switch(coalesce(act$calidad, ""),
-        "Muy buena" = "#06d6a0", "Buena" = "#0077b6",
-        "Regular"   = "#ffd166", "Mala"  = "#e63946", "#94a3b8")
+      dur_str <- format_duration(act$duration_min)
+      calidad_color <- color_calidad(act$calidad, defecto = "#94a3b8")
 
       has_quality <- !is.na(act$calidad) && !is.null(act$n_crol) && act$n_crol > 0
 
@@ -115,30 +110,13 @@ mod_sesiones_server <- function(id, activities, active_laps, sessions_ordered) {
       swolf_filt <- mean(laps$swolf, na.rm = TRUE)
       act$averageSwolf <- if (is.nan(swolf_filt) || is.na(swolf_filt)) NA_real_ else round(swolf_filt, 1)
 
-      # Recalcular calidad sobre crol filtrado
-      crol <- laps |> filter(swimStroke == "freestyle", !is.na(brazadas))
-      n_crol <- nrow(crol)
-
-      if (n_crol > 0) {
-        n_buenos   <- sum(crol$brazadas <= 11)
-        n_normales <- sum(crol$brazadas >= 12 & crol$brazadas <= 13)
-        n_caros    <- sum(crol$brazadas >= 14)
-        pct_buenos   <- round(n_buenos   / n_crol * 100, 1)
-        pct_normales <- round(n_normales / n_crol * 100, 1)
-        pct_caros    <- round(n_caros    / n_crol * 100, 1)
-        pct_le13     <- round((n_buenos + n_normales) / n_crol * 100, 1)
-        pct_le14     <- round((n_buenos + n_normales + n_caros) / n_crol * 100, 1)
-        calidad <- dplyr::case_when(
-          pct_buenos >= 50 ~ "Muy buena",
-          pct_le13   >= 40 ~ "Buena",
-          pct_le14   >= 50 ~ "Regular",
-          TRUE             ~ "Mala"
-        )
-        act$n_crol      <- n_crol
-        act$pct_buenos  <- pct_buenos
-        act$pct_normales <- pct_normales
-        act$pct_caros   <- pct_caros
-        act$calidad     <- calidad
+      # Recalcular calidad sobre crol filtrado (mismos umbrales que el resto de la app)
+      q <- resumir_calidad(laps |> filter(swimStroke == "freestyle"))
+      if (nrow(q) > 0) {
+        for (col in c("n_crol", "n_buenos", "n_normales", "n_caros",
+                      "pct_buenos", "pct_normales", "pct_caros", "calidad")) {
+          act[[col]] <- q[[col]][1]
+        }
       } else {
         act$n_crol <- 0L
       }
@@ -173,14 +151,7 @@ mod_sesiones_server <- function(id, activities, active_laps, sessions_ordered) {
           aes(tooltip = paste0(label, "\nBrazadas: ", brazadas, "\nSWOLF: ", swolf)),
           alpha = 0.5, size = 2.5, width = 0.3
         ) +
-        scale_color_manual(values = c(
-          "Crol"     = swim_palette[["primary"]],
-          "Espalda"  = swim_palette[["success"]],
-          "Braza"    = swim_palette[["warning"]],
-          "Mariposa" = swim_palette[["heart_avg"]],
-          "Mixto"    = swim_palette[["lighter"]],
-          "Técnica"  = swim_palette[["text_soft"]]
-        )) +
+        scale_color_manual(values = stroke_colors) +
         labs(x = "Brazadas por largo", y = "SWOLF") +
         theme_swim()
 

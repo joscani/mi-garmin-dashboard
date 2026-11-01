@@ -7,14 +7,20 @@ library(readr)
 GITHUB_DATA_REPO <- "joscani/garmin-data"
 GITHUB_DATA_BRANCH <- "main"
 
-# Descarga un CSV del repo privado de datos y devuelve su path temporal
+# Descarga un CSV del repo privado de datos y devuelve su path temporal.
+# El token va en la cabecera, no en la URL, para que no aparezca en errores ni logs.
 .github_download_csv <- function(filename) {
   token <- Sys.getenv("DATA_GITHUB_PAT", "")
   if (nchar(token) == 0) stop("Falta DATA_GITHUB_PAT para acceder a los datos")
-  url <- sprintf("https://%s@raw.githubusercontent.com/%s/%s/%s",
-                 token, GITHUB_DATA_REPO, GITHUB_DATA_BRANCH, filename)
+  url <- sprintf("https://raw.githubusercontent.com/%s/%s/%s",
+                 GITHUB_DATA_REPO, GITHUB_DATA_BRANCH, filename)
   tmp <- tempfile(fileext = ".csv")
-  download.file(url, destfile = tmp, quiet = TRUE)
+  h <- curl::new_handle()
+  curl::handle_setheaders(h, Authorization = paste("token", token))
+  res <- curl::curl_fetch_disk(url, tmp, handle = h)
+  if (res$status_code != 200) {
+    stop(sprintf("No se pudo descargar %s (HTTP %d)", filename, res$status_code))
+  }
   tmp
 }
 
@@ -54,7 +60,9 @@ load_laps <- function(path = "data/swimming_laps.csv", bust_cache = FALSE) {
     message("CSV local no encontrado, descargando de GitHub...")
     path <- .github_download_csv("swimming_laps.csv")
   }
-  d <- read_csv(path, show_col_types = FALSE) |>
+  # averageSwimCadence casi siempre vacío: sin tipo fijo readr lo infiere lógico y pierde valores
+  d <- read_csv(path, show_col_types = FALSE,
+                col_types = cols(averageSwimCadence = col_double(), swimStroke = col_character())) |>
     mutate(
       swimStroke = tolower(coalesce(swimStroke, "unknown")),
       brazadas   = totalNumberOfStrokes,
@@ -142,36 +150,37 @@ summarise_by_period <- function(activities, period = "week") {
     arrange(period_date)
 }
 
+#' Minutos decimales → "m:ss". Redondea a segundos totales antes de partir
+#' (si no, 2.999 daba "2:60").
 format_pace <- function(pace) {
-  mins <- floor(pace)
-  secs <- round((pace - mins) * 60)
-  sprintf("%d:%02d", mins, secs)
+  s <- round(pace * 60)
+  sprintf("%d:%02d", s %/% 60, s %% 60)
 }
 
-#' Calcula % de largos crol por umbral de brazadas y clasifica la sesión
-compute_session_quality <- function(laps) {
-  laps |>
-    filter(lapType == "active", distance > 0, swimStroke == "freestyle") |>
+#' Resume largos de crol (ya filtrados) por sesión y clasifica la calidad.
+#' Único sitio con los umbrales: lo usan compute_session_quality() y la pestaña
+#' Sesiones (que lo aplica tras quitar los primeros largos).
+resumir_calidad <- function(crol_laps) {
+  crol_laps |>
+    filter(!is.na(brazadas)) |>
     group_by(activityId) |>
     summarise(
       n_crol      = n(),
       # categorías mutuamente excluyentes
-      n_buenos    = sum(brazadas <= 11, na.rm = TRUE),
-      n_normales  = sum(brazadas >= 12 & brazadas <= 13, na.rm = TRUE),
-      n_caros     = sum(brazadas >= 14, na.rm = TRUE),
-      # porcentajes heredados para clasificación
-      pct_le11    = round(mean(brazadas <= 11, na.rm = TRUE) * 100, 1),
-      pct_le13    = round(mean(brazadas <= 13, na.rm = TRUE) * 100, 1),
-      pct_le14    = round(mean(brazadas <= 14, na.rm = TRUE) * 100, 1),
-      pct_ge14    = round(mean(brazadas >= 14, na.rm = TRUE) * 100, 1),
+      n_buenos    = sum(brazadas <= 11),
+      n_normales  = sum(brazadas >= 12 & brazadas <= 13),
+      n_caros     = sum(brazadas >= 14),
+      # porcentajes acumulados para clasificación
+      pct_le11    = round(mean(brazadas <= 11) * 100, 1),
+      pct_le13    = round(mean(brazadas <= 13) * 100, 1),
+      pct_le14    = round(mean(brazadas <= 14) * 100, 1),
+      pct_ge14    = round(mean(brazadas >= 14) * 100, 1),
       .groups = "drop"
     ) |>
     mutate(
-      pct_buenos   = round(n_buenos  / n_crol * 100, 1),
+      pct_buenos   = round(n_buenos   / n_crol * 100, 1),
       pct_normales = round(n_normales / n_crol * 100, 1),
-      pct_caros    = round(n_caros   / n_crol * 100, 1)
-    ) |>
-    mutate(
+      pct_caros    = round(n_caros    / n_crol * 100, 1),
       calidad = case_when(
         pct_buenos >= 50 ~ "Muy buena",
         pct_le13   >= 40 ~ "Buena",
@@ -179,4 +188,11 @@ compute_session_quality <- function(laps) {
         TRUE             ~ "Mala"
       )
     )
+}
+
+#' Calcula % de largos crol por umbral de brazadas y clasifica la sesión
+compute_session_quality <- function(laps) {
+  laps |>
+    filter(lapType == "active", distance > 0, swimStroke == "freestyle") |>
+    resumir_calidad()
 }

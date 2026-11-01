@@ -15,7 +15,7 @@
 #'   y_formatter función para formatear etiquetas del eje Y (opcional)
 #'   tooltip_fn  función(df) → character; si NULL usa tooltip por defecto
 
-mod_trend_chart_ui <- function(id, height = "480px") {
+mod_trend_chart_ui <- function(id, height = "340px") {
   ns <- NS(id)
   girafeOutput(ns("plot"), height = height, width = "100%")
 }
@@ -98,7 +98,7 @@ mod_trend_chart_server <- function(
       }
       gg <- gg + geom_point_interactive(pt_aes, color = col, size = 3)
 
-      gg <- gg + scale_x_date(date_labels = "%d %b", date_breaks = "2 weeks")
+      gg <- gg + scale_x_fecha(df[[x_col]])
 
       if (!is.null(y_formatter)) {
         gg <- gg + scale_y_continuous(labels = y_formatter)
@@ -116,7 +116,7 @@ mod_trend_chart_server <- function(
     reactive({
       if (!selectable) return(NULL)
       sel <- input$plot_selected
-      if (!is.null(sel) && nchar(sel) > 0) sel else NULL
+      if (length(sel) > 0 && nzchar(sel[1])) sel[1] else NULL
     })
   })
 }

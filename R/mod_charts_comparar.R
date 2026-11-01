@@ -93,11 +93,7 @@ mod_comparar_server <- function(id, sessions_ordered, active_laps, compare_reque
         mutate(largo = row_number())
     }
 
-    fmt_dur <- function(x) {
-      if (is.na(x) || is.null(x)) return("\u2014")
-      h <- floor(x / 60); m <- round(x %% 60)
-      if (h > 0) sprintf("%dh %02dmin", h, m) else sprintf("%d min", m)
-    }
+    fmt_dur <- format_duration
 
     # Cabeceras de sesión debajo de los selectores
     output$session_headers <- renderUI({
@@ -106,17 +102,11 @@ mod_comparar_server <- function(id, sessions_ordered, active_laps, compare_reque
       b <- get_session(input$session_b)
       req(nrow(a) > 0, nrow(b) > 0)
 
-      cal_color <- function(cal) switch(coalesce(cal, ""),
-        "Muy buena" = "#15803d", "Buena" = "#0077b6",
-        "Regular" = "#b45309", "Mala" = "#b91c1c", "#64748b")
-      cal_bg <- function(cal) switch(coalesce(cal, ""),
-        "Muy buena" = "#dcfce7", "Buena" = "#dbeafe",
-        "Regular" = "#fef3c7", "Mala" = "#fee2e2", "#f1f5f9")
-
       badge <- function(cal) {
-        if (is.na(cal) || is.null(cal)) return(tags$span())
+        if (is.null(cal) || is.na(cal)) return(tags$span())
         tags$span(
-          style = paste0("background:", cal_bg(cal), "; color:", cal_color(cal),
+          style = paste0("background:", color_calidad(cal, calidad_bg, "#f1f5f9"),
+                         "; color:", color_calidad(cal),
                          "; font-size:0.78rem; font-weight:700; padding:2px 10px;",
                          " border-radius:10px; margin-left:6px;"),
           cal

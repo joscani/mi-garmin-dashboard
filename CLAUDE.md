@@ -33,7 +33,7 @@ uv run python src/fetch_swimming.py
 R -e 'rsconnect::deployApp(appName = "mi-garmin-dashboard", account = "canadasreche")'
 ```
 
-There is **no test suite, linter, or build step**. Verify changes by running the app.
+There is **no test suite, linter, or build step**. Verify changes by running the app; `Rscript mejoras/verificar.R` runs ad-hoc data/module checks (quality consistency, m:ss formatting, modal re-open, KPI deltas).
 
 ## Data flow
 
@@ -44,6 +44,7 @@ Garmin Connect
             └─ Shiny app: R/utils_data.R loads CSVs
                  · local data/*.csv if present
                  · else downloads from raw.githubusercontent.com using DATA_GITHUB_PAT
+                   (sent as an Authorization header via curl, never in the URL)
 ```
 
 The CSVs and Garmin tokens live in the **separate private repo `joscani/garmin-data`**, never in this repo. Two independent updaters keep it fresh, both syncing tokens *and* CSVs back to that repo:
@@ -68,7 +69,8 @@ Garmin's SSO rate-limits aggressively (HTTP 429). `get_client()` avoids SSO when
 - **`app.R` server** owns the reactive graph: `raw_data` (reactiveVal) → `activities_filtered` / `laps_filtered` (by date range) → `summary_data` (by week/month). These reactives are passed *as functions* into the module servers.
 - **`R/mod_charts.R`** is an orchestrator only. It builds shared reactives (`active_laps`, `session_quality`, `sessions_ordered`) and delegates each dashboard tab to its own file: `mod_charts_evolucion.R`, `mod_charts_sesiones.R`, `mod_charts_resumen.R`, `mod_charts_comparar.R`. `mod_trend_chart.R` / `mod_lap_chart.R` are reusable chart sub-modules.
 - **Interactivity** is ggplot2 + **ggiraph**. Use the `make_girafe()` helper and the shared `gi_*` option objects in `mod_charts.R`; clicking a point sets a girafe selection that drives the session-detail views.
-- **Theming**: `bslib` (Bootstrap 5, flatly) + inline CSS in `app.R`; ggplot theme/palette in `R/utils_charts.R` (`theme_swim()`, `swim_palette`).
+- **Theming**: `bslib` (Bootstrap 5, flatly) + inline CSS in `app.R`; ggplot theme/palette in `R/utils_charts.R` (`theme_swim()`, `swim_palette`). Quality/stroke colours (`calidad_colors`, `calidad_bg`, `calidad_icon`, `stroke_colors`, `color_calidad()`), `format_duration()` and the range-aware date axis `scale_x_fecha()` also live there — use them instead of re-declaring colours or `"2 weeks"` breaks.
+- **Layout**: `page_sidebar(fillable = FALSE)` so the page scrolls naturally (fillable squeezed charts into a strip under the KPIs). The date-range filter goes through `date_range_ok()` in `app.R`, which waits until both dates are picked.
 
 ## «Pregúntale al panel» (Jev, `R/mod_pregunta.R` + `R/utils_jev.R`)
 
@@ -81,7 +83,9 @@ Optional natural-language card: the user's text goes to TypeSafe's Jev (`POST ht
 
 - **activities** = one row per swim session. **laps** = one row per individual length (`lapType == "active"` for real lengths, `"rest"` otherwise). Per-length stroke analysis always comes from **laps**, then joins back to activities.
 - `compute_brazadas_per_session()` aggregates laps → per-session stroke stats (avg/min/max/median/IQR, `consistencia`) and left-joins onto activities. `app.R` does this enrichment right after loading.
-- `compute_session_quality()` classifies each session **Muy buena / Buena / Regular / Mala** from the distribution of freestyle-length stroke counts (bands: ≤11 "buenos", 12–13 "normales", ≥14 "caros"). Thresholds are hard-coded in the `case_when` there — adjust in one place.
+- `compute_session_quality()` classifies each session **Muy buena / Buena / Regular / Mala** from the distribution of freestyle-length stroke counts (bands: ≤11 "buenos", 12–13 "normales", ≥14 "caros"). Thresholds live only in `resumir_calidad()`, which the Sesiones tab also calls after skipping the first lengths — adjust in one place.
+- `format_pace()` rounds to whole seconds before splitting m:ss (also used for durations in the table).
+- `load_laps()` pins `averageSwimCadence` to double; it is mostly empty and readr would otherwise guess logical and drop values.
 - **Caching**: loaders memoise into the `.data_cache` environment. The sidebar "Recargar datos" button calls `bust_cache()` to force a re-read/re-download.
 - **Column-name casing is inconsistent across the two CSVs** (Garmin's own field names): activities has `averageSwolf`, `averageHR`; laps has `averageSWOLF`, `averageSwimCadence`. `summarise_by_period()` reads the activities-side names. Check the actual CSV header when adding fields.
 

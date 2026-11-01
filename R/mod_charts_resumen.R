@@ -18,7 +18,7 @@ mod_resumen_ui <- function(id) {
       width = 1/2, class = "mt-3",
       card(full_screen = TRUE,
         card_header("Frecuencia cardíaca"),
-        girafeOutput(ns("hr"), height = "480px", width = "100%")
+        girafeOutput(ns("hr"), height = "340px", width = "100%")
       ),
       card(full_screen = TRUE,
         card_header("SWOLF medio por periodo"),
@@ -26,7 +26,7 @@ mod_resumen_ui <- function(id) {
       )
     ),
     card(full_screen = TRUE, class = "mt-3",
-      card_header("Evolución de calidad de sesiones por periodo (% crol)"),
+      card_header("Calidad de las sesiones por periodo"),
       girafeOutput(ns("quality_period"), height = "380px", width = "100%")
     ),
     card(full_screen = TRUE, class = "mt-3",
@@ -85,19 +85,13 @@ mod_resumen_server <- function(id, summary_data, activities, laps, aggregation) 
                   linetype = "dashed", linewidth = 0.8) +
         geom_point_interactive(aes(y = maxHR, tooltip = tip_max),
                                color = swim_palette["heart_max"], size = 2) +
-        scale_x_date(date_labels = "%d %b", date_breaks = "2 weeks") +
+        scale_x_fecha(df$date) +
         labs(x = NULL, y = "BPM") +
         theme_swim() +
         theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
       make_girafe(gg)
     })
-
-    # quality_period: multi-serie por calidad → se queda custom
-    quality_colors <- c(
-      "Muy buena" = "#06d6a0", "Buena" = "#0077b6",
-      "Regular"   = "#ffd166", "Mala"  = "#e63946"
-    )
 
     output$scatter_pace_swolf <- renderGirafe({
       acts <- activities() |> select(activityId, date)
@@ -131,7 +125,7 @@ mod_resumen_server <- function(id, summary_data, activities, laps, aggregation) 
     })
 
     output$heatmap <- renderPlot({
-      df_acts <- activities() |> filter(date >= as.Date("2026-01-01"))
+      df_acts <- activities()
       req(nrow(df_acts) > 0)
 
       day_labels <- c("Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom")
@@ -141,8 +135,9 @@ mod_resumen_server <- function(id, summary_data, activities, laps, aggregation) 
 
       cal <- tibble(date = seq(date_min, date_max, by = "day")) |>
         mutate(
-          year       = year(date),
           week_start = floor_date(date, "week", week_start = 1),
+          # año de la semana (no del día) para que una semana no se parta en dos
+          year       = year(week_start),
           dow        = wday(date, week_start = 1),
           dow_label  = factor(day_labels[dow], levels = rev(day_labels))
         ) |>
@@ -155,7 +150,9 @@ mod_resumen_server <- function(id, summary_data, activities, laps, aggregation) 
 
       ggplot(cal, aes(x = week_start, y = dow_label, fill = dist)) +
         geom_tile(color = "white", linewidth = 0.35) +
-        facet_wrap(~year, ncol = 1, scales = "free_x") +
+        # Años en columnas con ancho proporcional a sus semanas: con facet_wrap un
+        # año con una sola semana estiraba las casillas a todo el ancho
+        facet_grid(cols = vars(year), scales = "free_x", space = "free_x") +
         scale_fill_stepsn(
           colours = c("#ebedf0", "#9be9a8", "#40c463", "#30a14e", "#216e39"),
           breaks  = c(0, 1, 1000, 2000, 3000),
@@ -180,17 +177,20 @@ mod_resumen_server <- function(id, summary_data, activities, laps, aggregation) 
       df <- quality_by_period(activities(), laps(), period = aggregation())
       req(nrow(df) > 0)
 
-      gg <- ggplot(df, aes(x = period_date, y = pct, color = calidad, group = calidad)) +
-        geom_line(linewidth = 1.2) +
-        geom_point_interactive(
-          aes(tooltip = paste0(calidad, ": ", pct, "%\n(", n, " sesiones)"),
+      # Barras apiladas de nº de sesiones: con 2-3 sesiones por semana las líneas
+      # de % saltaban entre 0 y 100 y ocultaban cuántas sesiones había
+      ancho <- if (aggregation() == "month") 25 else 6
+      gg <- ggplot(df, aes(x = period_date, y = n, fill = calidad)) +
+        geom_col_interactive(
+          aes(tooltip = paste0(format(period_date, "%d %b %y"), "\n",
+                               calidad, ": ", n, " sesiones (", pct, "%)"),
               data_id = paste0(period_date, "_", calidad)),
-          size = 3
+          width = ancho, color = "white", linewidth = 0.2
         ) +
-        scale_color_manual(values = quality_colors) +
-        scale_x_date(date_labels = "%d %b", date_breaks = "2 weeks") +
-        scale_y_continuous(labels = function(x) paste0(x, "%"), limits = c(0, 100)) +
-        labs(x = NULL, y = "% sesiones", color = NULL) +
+        scale_fill_manual(values = calidad_colors, drop = FALSE) +
+        scale_x_fecha(df$period_date) +
+        scale_y_continuous(breaks = scales::pretty_breaks()) +
+        labs(x = NULL, y = "Sesiones", fill = NULL) +
         theme_swim() +
         theme(axis.text.x = element_text(angle = 45, hjust = 1))
 

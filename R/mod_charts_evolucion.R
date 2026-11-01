@@ -87,11 +87,6 @@ mod_evolucion_server <- function(id, activities, sessions_ordered, laps) {
         ))
       req(nrow(df) > 0)
 
-      calidad_colors <- c(
-        "Muy buena" = "#15803d", "Buena" = "#0077b6",
-        "Regular"   = "#b45309", "Mala"  = "#b91c1c"
-      )
-
       gg <- ggplot(df, aes(x = date, y = med_brazadas)) +
         geom_line(color = swim_palette[["light"]], linewidth = 1) +
         geom_smooth(method = "loess", formula = y ~ x, se = TRUE,
@@ -103,7 +98,7 @@ mod_evolucion_server <- function(id, activities, sessions_ordered, laps) {
           size = 3.5
         ) +
         scale_color_manual(values = calidad_colors, name = "Calidad", na.value = "#94a3b8") +
-        scale_x_date(date_labels = "%d %b", date_breaks = "2 weeks") +
+        scale_x_fecha(df$date) +
         scale_y_continuous(breaks = scales::pretty_breaks()) +
         labs(x = NULL, y = "Mediana brazadas/largo") +
         theme_swim() +
@@ -115,16 +110,19 @@ mod_evolucion_server <- function(id, activities, sessions_ordered, laps) {
 
     # ═══ DETALLE DE SESIÓN (modal al clicar cualquier gráfico de sesión) ═══
 
-    selected_act_id <- reactiveVal(NULL)
+    # Guarda id + nonce: así el modal se abre aunque se vuelva a clicar la
+    # misma sesión (en el mismo gráfico o en otro)
+    selected_click <- reactiveVal(NULL)
+    selected_act_id <- reactive(selected_click()$id)
+    seleccionar <- function(s) {
+      if (length(s) > 0 && nzchar(s[1])) selected_click(list(id = s[1], nonce = Sys.time()))
+    }
 
-    observe({ s <- sel_strokes();  if (!is.null(s)) selected_act_id(s) })
-    observe({ s <- sel_pace();     if (!is.null(s)) selected_act_id(s) })
-    observe({ s <- sel_swolf();    if (!is.null(s)) selected_act_id(s) })
-    observe({ s <- sel_distance(); if (!is.null(s)) selected_act_id(s) })
-    observe({
-      sel <- input$median_trend_selected
-      if (!is.null(sel) && nchar(sel) > 0) selected_act_id(sel)
-    })
+    observe(seleccionar(sel_strokes()))
+    observe(seleccionar(sel_pace()))
+    observe(seleccionar(sel_swolf()))
+    observe(seleccionar(sel_distance()))
+    observe(seleccionar(input$median_trend_selected))
 
     output$detail_laps <- DT::renderDT({
       req(selected_act_id())
@@ -141,21 +139,14 @@ mod_evolucion_server <- function(id, activities, sessions_ordered, laps) {
         select(Largo, Estilo, Brazadas, SWOLF, `Dist (m)`)
     }, options = list(pageLength = 50, dom = "t", ordering = FALSE), rownames = FALSE)
 
-    observeEvent(selected_act_id(), {
+    observeEvent(selected_click(), {
       req(selected_act_id())
       act <- sessions_ordered() |> filter(activityId == as.numeric(selected_act_id()))
       req(nrow(act) > 0)
       act <- act[1, ]
 
-      h <- floor(act$duration_min / 60)
-      m <- round(act$duration_min %% 60)
-      dur_str <- if (h > 0) sprintf("%dh %02dmin", h, m) else sprintf("%d min", m)
-
-      ht <- floor(coalesce(act$duration_total_min, NA_real_) / 60)
-      mt <- round(coalesce(act$duration_total_min, NA_real_) %% 60)
-      dur_total_str <- if (!is.na(act$duration_total_min))
-        (if (ht > 0) sprintf("%dh %02dmin", ht, mt) else sprintf("%d min", mt))
-      else "\u2014"
+      dur_str       <- format_duration(act$duration_min)
+      dur_total_str <- format_duration(act$duration_total_min)
 
       hist10 <- sessions_ordered() |>
         filter(date < act$date) |> arrange(desc(date)) |> head(10)
@@ -180,12 +171,8 @@ mod_evolucion_server <- function(id, activities, sessions_ordered, laps) {
       }
 
       calidad_val   <- if (is.null(act$calidad) || is.na(act$calidad)) NA else act$calidad
-      calidad_color <- switch(as.character(calidad_val),
-        "Muy buena" = "#15803d", "Buena" = "#0077b6",
-        "Regular"   = "#b45309", "Mala"  = "#b91c1c", "#64748b")
-      calidad_bg <- switch(as.character(calidad_val),
-        "Muy buena" = "#dcfce7", "Buena" = "#dbeafe",
-        "Regular"   = "#fef3c7", "Mala"  = "#fee2e2", "#f1f5f9")
+      calidad_color <- color_calidad(calidad_val)
+      calidad_fondo <- color_calidad(calidad_val, calidad_bg, defecto = "#f1f5f9")
 
       showModal(modalDialog(
         title = tags$span(tags$span("\U0001F3CA", style = "margin-right:8px;"),
@@ -194,7 +181,7 @@ mod_evolucion_server <- function(id, activities, sessions_ordered, laps) {
 
         tags$div(style = "text-align:center; margin-bottom:14px;",
           tags$div(
-            style = paste0("display:inline-block; background:", calidad_bg, "; color:", calidad_color,
+            style = paste0("display:inline-block; background:", calidad_fondo, "; color:", calidad_color,
                            "; font-size:1.5rem; font-weight:800; border-radius:10px; padding:8px 28px;"),
             if (is.na(calidad_val)) "\u2014" else calidad_val
           )

@@ -6,7 +6,7 @@
 #'   y_lab        etiqueta del eje Y y tooltip
 #'   session_info reactive() → fila de la sesión actual (para título y subtítulo)
 
-mod_lap_chart_ui <- function(id, height = "480px") {
+mod_lap_chart_ui <- function(id, height = "340px") {
   ns <- NS(id)
   girafeOutput(ns("plot"), height = height, width = "100%")
 }
@@ -19,9 +19,7 @@ mod_lap_chart_server <- function(id, data, y_col, y_lab, session_info) {
       act <- session_info()
       req(nrow(df) > 0)
 
-      h <- floor(act$duration_min / 60)
-      m <- round(act$duration_min %% 60)
-      dur_str <- if (h > 0) sprintf("%dh %02dmin", h, m) else sprintf("%d min", m)
+      dur_str <- format_duration(act$duration_min)
 
       title_str <- paste0(
         format(act$date, "%d %B %Y"), "  ·  ",
@@ -30,14 +28,8 @@ mod_lap_chart_server <- function(id, data, y_col, y_lab, session_info) {
       )
 
       subtitle_str <- if (!is.na(act$calidad) && !is.null(act$n_crol) && act$n_crol > 0) {
-        calidad_icon <- switch(act$calidad,
-          "Buena"   = "\u2705",
-          "Regular" = "\u26a0\ufe0f",
-          "Floja"   = "\u274c",
-          ""
-        )
         paste0(
-          calidad_icon, " Sesi\u00f3n ", act$calidad,
+          color_calidad(act$calidad, calidad_icon, defecto = ""), " Sesi\u00f3n ", act$calidad,
           "  (crol: ", act$n_crol, " largos)\n",
           "\u2264\u202f11 brazadas: ", act$pct_buenos, "%  \u00b7  ",
           "12\u201313: ", act$pct_normales, "%  \u00b7  ",
@@ -65,14 +57,7 @@ mod_lap_chart_server <- function(id, data, y_col, y_lab, session_info) {
           size = 3
         ) +
         scale_x_continuous(breaks = scales::pretty_breaks()) +
-        scale_color_manual(values = c(
-          "Crol"     = swim_palette[["primary"]],
-          "Espalda"  = swim_palette[["success"]],
-          "Braza"    = swim_palette[["warning"]],
-          "Mariposa" = swim_palette[["heart_avg"]],
-          "Mixto"    = swim_palette[["lighter"]],
-          "Técnica"  = swim_palette[["text_soft"]]
-        )) +
+        scale_color_manual(values = stroke_colors) +
         labs(x = "Largo", y = y_lab, title = title_str, subtitle = subtitle_str) +
         theme_swim()
 
